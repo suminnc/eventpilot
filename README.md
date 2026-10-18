@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# EventPilot: your AI event planning crew
 
-## Getting Started
+Built for **LA Hacks: AI Hackathon 2026** ([tracks](https://live.lahacks.com/tracks)). The flagship demo plans **Cal Hacks 13.0**.
 
-First, run the development server:
+You describe an event in plain English. A **Coordinator** agent turns that into a structured brief and hands the work to six specialist agents. You can watch each agent's reasoning and tool calls stream live:
+
+| Agent | Job | Tools |
+|---|---|---|
+| Coordinator | Turns the request into a brief, routes the work, applies refinements | intent parser / LLM |
+| Venue Scout | Finds and ranks venues by capacity, cost, and vibe | `venue_search` (curated LA + Bay Area catalog) |
+| Budget Analyst | Splits the budget into line items and keeps a contingency | `budget_calculator` |
+| Scheduler | Builds a run-of-show that can span several days | template + LLM |
+| Logistics | Picks vendors, builds a timeline of tasks, checks weather | `weather_forecast` (live [Open-Meteo](https://open-meteo.com), no key) |
+| Comms | Writes the invite email and an SMS reminder | LLM |
+| Critic | Checks the plan for risks and scores confidence from 0 to 100 | rule checks + LLM |
+
+Order of work: the Coordinator runs first. Scout and Weather run in parallel, then Budget and Scheduler, then Logistics and Comms, and the Critic runs last. Every agent has an **LLM path** and a **deterministic offline path**, so the demo still works without a key or Wi-Fi to an LLM provider. Only the weather tool needs internet.
+
+Other features:
+- Refine a plan in follow-up chat, e.g. "make it 20% cheaper" or "add 500 more hackers".
+- Pick an alternate venue, check off tasks, and copy the invite or SMS.
+- Export the plan to **.ics** (the event plus prep-task deadlines) or **Markdown**.
+- Plans are saved in localStorage.
+- `POST /api/agent` returns JSON for other agents to call. `agents/fetch/` holds a **Fetch.ai uAgent** that registers EventPilot on Agentverse so it can be found through ASI:One.
+
+## Quick start
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # optional: add an LLM key
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Any OpenAI-compatible endpoint works. The default is StepFun `step-5-preview`; Gemini and OpenAI settings are listed in `.env.example`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### API
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+curl -X POST localhost:3000/api/plan  -d '{"prompt":"Plan Cal Hacks 13.0 in SF, 36h, 2000 hackers, $500k"}'   # NDJSON stream of agent events
+curl -X POST localhost:3000/api/agent -d '{"prompt":"..."}'                                                   # { plan, markdown }
+```
 
-## Learn More
+### Fetch.ai / ASI:One
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+cd agents/fetch && pip install -r requirements.txt
+EVENTPILOT_URL=https://<deploy>/api/agent AGENT_SEED="<secret>" python eventpilot_agent.py
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Track fit
+- **Applied Intelligence**: real event-ops automation for student organizers.
+- **Fetch.ai ASI:One Agent Challenge**: a uAgent with the chat protocol that turns intent into a full plan.
+- **StepFun**: `step-5-preview` is the default reasoning model.
+- **Paper (Best Designed Hack)** and **Best Use of Devin**.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Stack
+Next.js 15 (App Router) · React 19 · Tailwind v4 · TypeScript · lucide-react. Venue rates are planning estimates, not quotes.

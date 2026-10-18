@@ -1,103 +1,155 @@
-import Image from "next/image";
+"use client";
+import { useEffect, useState } from "react";
+import { ArrowRight, Bot, History, RotateCcw, Send, Sparkles, Trash2, Wand2 } from "lucide-react";
+import { AgentRoster, AgentTrace } from "@/components/AgentTrace";
+import { PlanView } from "@/components/PlanView";
+import { PRESETS } from "@/components/presets";
+import { usePlanner } from "@/lib/usePlanner";
+import { deletePlan, loadPlans, savePlan } from "@/lib/storage";
+import type { EventPlan } from "@/lib/types";
+
+const REFINEMENTS = ["Make it 20% cheaper", "Move everything indoors", "Add 500 more hackers", "Start at 10am instead"];
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const { events, plan, setPlan, running, error, run } = usePlanner();
+  const [prompt, setPrompt] = useState(PRESETS[0].prompt);
+  const [feedback, setFeedback] = useState("");
+  const [saved, setSaved] = useState<EventPlan[]>([]);
+  const started = running || events.length > 0 || plan;
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+  useEffect(() => setSaved(loadPlans()), []);
+  useEffect(() => {
+    if (plan) {
+      savePlan(plan);
+      setSaved(loadPlans());
+    }
+  }, [plan]);
+
+  const submit = (p = prompt) => p.trim() && run({ prompt: p });
+  const refine = (f = feedback) => {
+    if (!plan || !f.trim()) return;
+    run({ prompt: plan.brief.prompt, feedback: f, previous: plan });
+    setFeedback("");
+  };
+
+  return (
+    <main className="bg-grid min-h-screen">
+      <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
+        <button onClick={() => window.location.reload()} className="flex items-center gap-2">
+          <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-violet-500 to-sky-500"><Wand2 size={16} /></span>
+          <span className="text-lg font-semibold tracking-tight">EventPilot</span>
+        </button>
+        <span className="hidden text-xs text-white/40 sm:block">Built for LA Hacks · AI Hackathon 2026</span>
+      </header>
+
+      {!started ? (
+        <section className="mx-auto max-w-3xl px-6 pb-20 pt-10 text-center">
+          <div className="mx-auto mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
+            <Sparkles size={12} className="text-violet-300" /> 7 specialist agents · live tools · one prompt
+          </div>
+          <h1 className="text-4xl font-semibold tracking-tight sm:text-6xl">
+            Describe your event.
+            <br />
+            <span className="bg-gradient-to-r from-violet-300 via-sky-300 to-emerald-300 bg-clip-text text-transparent">Your AI crew plans it.</span>
+          </h1>
+          <p className="mx-auto mt-4 max-w-xl text-white/60">
+            A coordinator delegates to a venue scout, budget analyst, scheduler, logistics lead, comms writer and a critic — and you watch them work in real time.
+          </p>
+
+          <div className="card mt-8 p-3 text-left">
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit(); }}
+              rows={4}
+              className="w-full resize-none bg-transparent p-2 text-[15px] outline-none placeholder:text-white/30"
+              placeholder="e.g. A 36-hour hackathon in San Francisco for 2,000 students, $500k budget…"
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-3">
+              <div className="flex flex-wrap gap-1.5">
+                {PRESETS.map((p) => (
+                  <button key={p.label} onClick={() => setPrompt(p.prompt)} className={`rounded-full border px-3 py-1 text-xs transition ${prompt === p.prompt ? "border-violet-400/60 bg-violet-500/15 text-white" : "border-white/10 text-white/60 hover:text-white"}`}>
+                    {p.emoji} {p.label}
+                  </button>
+                ))}
+              </div>
+              <button className="btn-primary" onClick={() => submit()} disabled={!prompt.trim()}>
+                Plan it <ArrowRight size={14} />
+              </button>
+            </div>
+          </div>
+
+          {saved.length > 0 && (
+            <div className="mt-10 text-left">
+              <h2 className="mb-3 flex items-center gap-2 text-sm text-white/50"><History size={14} /> Your events</h2>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {saved.map((p) => (
+                  <div key={p.id} className="card flex items-center justify-between p-3">
+                    <button className="text-left" onClick={() => setPlan(p)}>
+                      <div className="font-medium">{p.brief.title}</div>
+                      <div className="text-xs text-white/40">{p.brief.date} · {p.brief.guests.toLocaleString()} guests · {p.brief.city}</div>
+                    </button>
+                    <button className="text-white/30 hover:text-red-300" onClick={() => { deletePlan(p.id); setSaved(loadPlans()); }} aria-label="Delete">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      ) : (
+        <section className="mx-auto grid max-w-7xl gap-5 px-6 pb-16 lg:grid-cols-[380px_1fr]">
+          <aside className="flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start">
+            <div className="card p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="flex items-center gap-2 text-sm font-medium"><Bot size={15} /> Agent crew</h2>
+                <button className="flex items-center gap-1 text-xs text-white/40 hover:text-white" onClick={() => window.location.reload()}>
+                  <RotateCcw size={12} /> New event
+                </button>
+              </div>
+              <AgentRoster events={events} running={running} />
+            </div>
+            <div className="card p-4">
+              <h2 className="mb-3 text-sm font-medium">Live reasoning trace</h2>
+              <AgentTrace events={events} running={running} />
+            </div>
+            {plan && (
+              <div className="card p-4">
+                <h2 className="mb-2 text-sm font-medium">Refine with the crew</h2>
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {REFINEMENTS.map((r) => (
+                    <button key={r} disabled={running} onClick={() => refine(r)} className="rounded-full border border-white/10 px-2.5 py-1 text-xs text-white/60 hover:text-white disabled:opacity-40">
+                      {r}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input className="input" value={feedback} disabled={running} onChange={(e) => setFeedback(e.target.value)} onKeyDown={(e) => e.key === "Enter" && refine()} placeholder="e.g. budget is $400k, add a hardware lab" />
+                  <button className="btn-primary px-3" disabled={running || !feedback.trim()} onClick={() => refine()} aria-label="Send refinement">
+                    <Send size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </aside>
+          <div>
+            {error && <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</div>}
+            {plan ? (
+              <div className={running ? "pointer-events-none opacity-50 transition" : "transition"}>
+                <PlanView plan={plan} onChange={setPlan} />
+              </div>
+            ) : (
+              <div className="card grid min-h-[420px] place-items-center p-10 text-center text-white/40">
+                <div>
+                  <Bot size={28} className="mx-auto mb-3 animate-pulse text-violet-300" />
+                  The crew is assembling your plan…
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+    </main>
   );
 }

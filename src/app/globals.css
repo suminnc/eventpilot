@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #07070c;
+  --foreground: #ececf1;
 }
 
 @theme inline {
@@ -12,15 +12,50 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
+
+.bg-grid {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(139, 92, 246, 0.25), transparent 60%),
+    radial-gradient(ellipse 50% 40% at 90% 10%, rgba(56, 189, 248, 0.12), transparent 60%),
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: auto, auto, 44px 44px, 44px 44px;
+}
+
+@utility card {
+  @apply rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur;
+}
+
+@utility input {
+  @apply w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none transition placeholder:text-white/30 focus:border-violet-400/60 focus:ring-2 focus:ring-violet-500/20;
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50;
+}
+@utility btn-primary {
+  @apply btn bg-gradient-to-r from-violet-500 to-sky-500 text-white shadow-lg shadow-violet-500/20 hover:brightness-110;
+}
+@utility btn-ghost {
+  @apply btn border border-white/10 bg-white/[0.04] text-white/80 hover:bg-white/[0.08];
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fade-up 0.35s ease-out both; }
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 currentColor; }
+  100% { box-shadow: 0 0 0 8px transparent; }
+}
+.pulse-ring { animation: pulse-ring 1.2s ease-out infinite; }
+
+.scrollbar-thin::-webkit-scrollbar { width: 6px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }

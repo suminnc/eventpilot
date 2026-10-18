@@ -111,7 +111,7 @@ async function scout(ctx: Ctx, brief: EventBrief): Promise<Venue[]> {
     const found = await tool(
       ctx, "scout", "venue_search",
       JSON.stringify({ city: brief.city, type: brief.eventType, vibe: brief.vibe, guests: brief.guests, maxHourly: Math.round(maxHourly) }),
-      () => venueSearchTool(brief.city, brief.eventType, brief.vibe, brief.guests, maxHourly),
+      () => venueSearchTool(brief.city, brief.eventType, brief.vibe, brief.guests, maxHourly, brief.prompt),
       (r) => r.map((v) => `${v.name} (${v.capacity} cap, ${money(v.pricePerHour)}/hr)`).join("; "),
     );
     return withLLM(ctx, "scout",

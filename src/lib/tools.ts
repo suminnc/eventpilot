@@ -99,26 +99,28 @@ const GENERIC: (Omit<Venue, "why" | "neighborhood"> & { tags: string[] })[] = [
   { name: "Community Park Pavilion", capacity: 150, pricePerHour: 50, style: "Covered park pavilion", indoor: false, tags: ["picnic", "birthday", "family", "casual"] },
   { name: "Boutique Hotel Rooftop", capacity: 120, pricePerHour: 650, style: "Rooftop terrace", indoor: false, tags: ["party", "networking", "social", "launch"] },
   { name: "Restaurant table reservation", capacity: 16, pricePerHour: 0, style: "Restaurant, no room fee", indoor: true, tags: ["dinner", "intimate", "birthday", "team", "casual"] },
-  { name: "Convention Center Hall", capacity: 8000, pricePerHour: 2500, style: "Exhibit hall, rented by the day", indoor: true, tags: ["conference", "hackathon", "expo", "large", "convention", "festival"] },
+  { name: "Convention Center Hall", capacity: 8000, pricePerHour: 2500, style: "Exhibit hall, rented by the day", indoor: true, tags: ["conference", "expo", "convention", "trade show"] },
   { name: "Fairgrounds / Stadium Lot", capacity: 60000, pricePerHour: 4000, style: "Open grounds with staging and power", indoor: false, tags: ["festival", "concert", "fair", "large", "music"] },
   { name: "Private Dining Room", capacity: 40, pricePerHour: 220, style: "Restaurant private room", indoor: true, tags: ["dinner", "intimate", "birthday", "team"] },
 ];
 
-export function venueSearchTool(city: string, eventType: string, vibe: string, guests: number, maxHourly: number) {
+export function venueSearchTool(city: string, eventType: string, vibe: string, guests: number, maxHourly: number, prompt = "") {
+  const asked = prompt.toLowerCase();
   const region = regionFor(city);
   const words = `${eventType} ${vibe}${guests >= 1000 ? " large" : ""}`.toLowerCase();
   const local = GENERIC.map((v) => ({ ...v, neighborhood: city.split(",")[0], city }));
   const pool = region ? [...CATALOG.filter((v) => v.city === region), ...local] : local;
   return pool
     .map((v) => {
-      const tagScore = v.tags.filter((t) => words.includes(t)).length * 3 + (v.tags.includes(eventType.toLowerCase()) ? 4 : 0);
+      const tagScore = v.tags.filter((t) => new RegExp(`\\b${t}\\b`).test(words)).length * 3 + (v.tags.includes(eventType.toLowerCase()) ? 4 : 0);
       const fits = v.capacity >= guests ? Math.max(-6, 4 - 2 * Math.log2(v.capacity / Math.max(guests, 1))) : -10;
       const wantsIndoor = /indoor/.test(words) && !v.indoor ? -12 : 0;
       const price = v.pricePerHour <= maxHourly ? 2 : -3 - 2 * Math.log2(v.pricePerHour / Math.max(maxHourly, 1));
       const cityName = city.split(",")[0].trim().toLowerCase();
       const named = CATALOG.includes(v as (typeof CATALOG)[number]);
       const near = named && cityName && `${v.name} ${v.neighborhood}`.toLowerCase().includes(cityName) ? 3 : 0;
-      return { v, score: wantsIndoor + tagScore + (tagScore ? 0 : -3) + fits + price + near + (named ? 2 : 0) };
+      const requested = asked && asked.includes(v.name.toLowerCase().split(/\s+(?:cruise|at|event|private)\b/)[0]) ? 30 : 0;
+      return { v, score: requested + wantsIndoor + tagScore + (tagScore ? 0 : -3) + fits + price + near + (named ? 2 : 0) };
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, 3)

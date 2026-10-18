@@ -42,7 +42,7 @@ export function parseBriefOffline(prompt: string, base: Partial<EventBrief> = {}
   let budget = base.budget || 0;
   if (!budget && budgetM) budget = parseFloat(budgetM[1].replace(/,/g, "")) * (/^(m|mm|million)$/.test(budgetM[2] ?? "") ? 1e6 : budgetM[2] ? 1000 : 1);
 
-  const cityM = prompt.match(/\bin\s+([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)*(?:,\s?[A-Z]{2})?)/) || prompt.match(/\b(?:at|near)\s+([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)*(?:,\s?[A-Z]{2})?)/);
+  const cityM = prompt.match(/\bin\s+([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)*(?:,\s?[A-Z]{2})?)/) || prompt.match(/\b(San Francisco|Los Angeles|Berkeley|Oakland|San Jose|Palo Alto|Pasadena|Santa Monica|San Diego|New York|Chicago|Austin|Seattle|Boston|Miami|Denver)\b/i) || prompt.match(/\b(?:at|near)\s+([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)*(?:,\s?[A-Z]{2})?)/);
   const city =
     base.city ||
     (cityM && !/^(the|a)$/i.test(cityM[1]) ? cityM[1] : /cal ?hacks|berkeley/i.test(prompt) ? "San Francisco" : /\bsf\b/i.test(prompt) ? "San Francisco" : "Los Angeles");

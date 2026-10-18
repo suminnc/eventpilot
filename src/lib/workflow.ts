@@ -121,6 +121,11 @@ export function autoProgress(plan: EventPlan): { done: Set<string>; active: Set<
   mark("permits", permitIds.length > 0 && permitDone === permitIds.length, permitDone > 0 || a.outbox.some((m) => permitIds.includes(m.taskId ?? "")));
   mark("confirm", ordered && !a.purchases.some((p) => p.status === "pending") && !threads.some((t) => ["awaiting_reply", "negotiating", "agreed", "needs_you"].includes(t.status)), threads.length > 0);
   mark("guide", sentAll(guide), guide.length > 0);
+  const ops = plan.dayops, fin = plan.finance;
+  mark("event", false, !!ops);
+  mark("retro", !!ops?.postmortemAt, false);
+  const openFin = (fin?.reimbursements ?? []).some((r) => r.status !== "Paid" && r.status !== "Denied") || (fin?.requests ?? []).some((r) => r.status === "Waiting on director");
+  mark("close", !!ops && ops.payments.length > 0 && ops.payments.every((p) => p.status === "paid" || p.status === "rejected") && !openFin, !!ops && (ops.payments.some((p) => p.status !== "pending") || !!fin?.reimbursements.length));
   return { done, active };
 }
 

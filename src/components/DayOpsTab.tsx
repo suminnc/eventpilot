@@ -207,7 +207,7 @@ export function DayOpsTab({ plan, onChange }: { plan: EventPlan; onChange: (p: E
       <section className="card p-5">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="section-head flex items-center gap-2"><FileText size={16} /> Post-mortem</h3>
-          <button className="btn-ghost px-3 py-1.5 text-[13px]" onClick={() => setReport(postmortem(plan, o))}>Generate</button>
+          <button className="btn-ghost px-3 py-1.5 text-[13px]" onClick={() => { setReport(postmortem(plan, o)); onChange({ ...plan, dayops: { ...o, postmortemAt: localIso(new Date()) } }); }}>Generate</button>
         </div>
         {report ? <pre className="scrollbar-thin overflow-x-auto whitespace-pre-wrap rounded-lg bg-surface p-4 text-[13px] leading-6">{report}</pre> : <p className="text-sm text-muted">Spend, attendance, meals, incidents, delays, sponsors and prizes in one report.</p>}
       </section>

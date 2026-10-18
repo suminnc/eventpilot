@@ -14,6 +14,8 @@ import { buildSwarm, swarmText, SWARM_NAME, SWARM_VERSION } from "./swarm";
 import { creaoConfig, runCreaoAgent } from "./creao";
 import { thisWeekText } from "./workflow";
 import { stakeholderText } from "./stakeholders";
+import { attentionText, dayOpsOf, localIso, reportIncident, shiftSchedule, type IncidentCategory, type Severity } from "./dayops";
+import { financeText } from "./finance";
 
 /**
  * Server-side Photon agent: polls the organizer's iMessages and acts on them even when no browser is open.
@@ -249,6 +251,45 @@ export async function handleInbound(text: string, id: string) {
     return reply(`${head}${failed.length ? ` ${failed.length} failed and stay in drafts (${failed[0]}).` : ""} ${mail && sent.some((m) => /^(bookings|events)@/.test(m.to)) ? " I'll read the vendors' replies, negotiate, and text you when a deal needs your OK. Text VENDORS for status." : ""} Logged in the audit trail. Money still only moves on YES / PICK.`);
   }
 
+  if (/^(attention|ops|day of|day-of|dayof|day of ops|alerts|issues|whats wrong)$/.test(low)) return reply(attentionText(p));
+  if (/^(finance|money|reimbursements?|budget requests?)$/.test(low)) return reply(financeText(p));
+  const incM = t.trim().match(/^incident[:\s]+([\s\S]+)$/i);
+  if (incM) {
+    let rest = incM[1].trim();
+    const sevM = rest.match(/\b(critical|urgent|high|medium|low)\b/i);
+    const severity = (sevM ? sevM[1].toLowerCase().replace("urgent", "critical") : "medium") as Severity;
+    const catM = rest.match(/^(medical|security|conduct|facilities|lost[ _-]?(?:and[ _-])?found|other)\b/i);
+    const l2 = rest.toLowerCase();
+    const category: IncidentCategory = catM
+      ? (/^lost/i.test(catM[1]) ? "lost_found" : (catM[1].toLowerCase() as IncidentCategory))
+      : /medic|faint|injur|hurt|bleed|allerg|sick|ambulance|seizure|unconscious/.test(l2) ? "medical"
+      : /secur|fight|theft|stolen|intruder|weapon|threat/.test(l2) ? "security"
+      : /harass|conduct|inappropriate/.test(l2) ? "conduct"
+      : /power|wi-?fi|internet|leak|spill|toilet|restroom|outlet|hvac|broken|trash|facilit/.test(l2) ? "facilities"
+      : /lost|found|missing/.test(l2) ? "lost_found" : "other";
+    if (catM) rest = rest.slice(catM[0].length).trim();
+    if (sevM && rest.toLowerCase().startsWith(sevM[1].toLowerCase())) rest = rest.slice(sevM[1].length).trim();
+    if (!rest) return reply("Say what happened, e.g. INCIDENT medical attendee fainted near stage.");
+    const r = reportIncident(dayOpsOf(p), { category, severity, description: rest, reportedBy: "Organizer (text)" });
+    setPlan(log({ ...p, dayops: r.ops }, "organizer", "incident_reported", `#${r.incident.id} ${severity} ${category}: ${rest.slice(0, 60)}`));
+    return reply(`Logged incident #${r.incident.id}: ${severity} ${category.replace("_", " ")}. Routed to ${r.incident.owner}${severity === "critical" ? `, escalated to ${r.ops.director}` : ""}.${category === "medical" && /critical|high/.test(severity) ? " If anyone is in danger, call 911 first." : ""} Text ATTENTION for everything open.`);
+  }
+  const delM = low.match(/^(?:delay|shift)\s+(.+?)\s+(?:by\s+)?(-?\d+)\s*(?:m|min|mins|minutes)?(?:\s+(only|rest of (?:the )?day))?$/);
+  if (delM) {
+    const mins = parseInt(delM[2], 10);
+    if (!mins || Math.abs(mins) > 240) return reply("Give a delay between 1 and 240 minutes, e.g. DELAY LUNCH 15.");
+    const o = dayOpsOf(p);
+    const term = delM[1].replace(/^the\s+/, "");
+    const nowL = localIso(new Date());
+    const hits = o.ros.filter((r) => r.title.toLowerCase().includes(term));
+    const item = hits.find((r) => r.endsAt >= nowL) ?? hits[0];
+    if (!item) return reply(`No run-of-show item matches "${term}". Try one of: ${o.ros.slice(0, 6).map((r) => r.title).join(", ")}.`);
+    const scope = delM[3] === "only" ? "item" : "day";
+    const s = shiftSchedule(o, item.id, mins, scope, "Organizer (text)");
+    setPlan(log({ ...p, dayops: s.ops }, "organizer", "schedule_shift", `${item.title} ${mins > 0 ? "+" : ""}${mins} min (${scope})`));
+    const flagged = s.mealsFlagged.map((mid) => s.ops.meals.find((m) => m.id === mid)!);
+    return reply(`Moved ${item.title}${scope === "day" && s.shifted > 1 ? ` and the ${s.shifted - 1} item${s.shifted > 2 ? "s" : ""} after it that day` : ""} by ${mins > 0 ? "+" : ""}${mins} min; linked announcements moved too.${flagged.length ? ` Tell ${[...new Set(flagged.map((m) => m.vendor))].join(", ")} the new time for ${flagged.map((m) => m.meal).join(", ")}.` : ""}${scope === "day" ? " Add ONLY to move just this item." : ""}`);
+  }
   const amt = (x: string) => parseFloat(x.replace(/[$,]/g, "")) * (/k$/.test(x) ? 1000 : 1);
   const ctr = low.match(/^(?:negotiate|counter|offer|ask|get|bring|make|push|try)\s+(?:(.+?)\s+)?(?:down\s+)?(?:(?:to|for|at)\s+)?(\$?[\d,]+(?:\.\d+)?k?)(?:\s+(?:instead|total|please|now|confirm))*$/);
   const ctr2 = low.match(/^(\$?[\d,]+(?:\.\d+)?k?)\s+(?:for|on)\s+(.+)$/);

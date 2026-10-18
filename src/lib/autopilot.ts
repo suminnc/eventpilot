@@ -1,3 +1,5 @@
+import { seedDayOps } from "./dayops";
+import { syncFinance } from "./finance";
 import type { AuditEntry, Autopilot, EventBrief, EventPlan, OutboxMessage, Purchase, Quote, Round, Shortlist, SpendMandate, Vendor } from "./types";
 
 /**
@@ -193,6 +195,22 @@ export function planSteps(plan: EventPlan, mandate: SpendMandate, opts: { awaitV
     msg({ channel: "email", to: "guest-list", subject: plan.invite.subject, body: plan.invite.body, taskId: findTask(/save-the-date|registration/i) }, "comms"),
     msg({ channel: "email", to: "guest-list", subject: `Attendee guide: ${b.title}`, body: `Hi {first_name},\n\nHere's everything you need for ${b.title} on ${b.date} at ${venue?.name ?? b.city}.\n\nSchedule:\n${plan.schedule.slice(0, 12).map((s) => `${plan.schedule.some((x) => (x.day ?? 1) > 1) ? `Day ${s.day ?? 1} ` : ""}${s.time}  ${s.title}`).join("\n")}\n\nDoors open at ${b.startTime}.${b.guests >= 150 ? " Bring a photo ID for check-in." : ""}${plan.ops?.policies.length ? `\nPlease read our policies: ${plan.ops.policies.map((x) => x.name).join(", ")}.` : ""}\n\nSee you there!`, taskId: findTask(/guide|logistics email|day-of info/i) }, "comms"),
     msg({ channel: "sms", to: "guest-list (T-3 days)", subject: "Reminder", body: plan.invite.sms, taskId: findTask(/reminder/i) }, "comms"),
+  );
+  steps.push(
+    {
+      label: "Finance: master budget built (categories → vendor items, allocated / committed / spent)",
+      apply: (a, p) => {
+        const finance = syncFinance({ ...p, autopilot: a });
+        return { a: { ...a, audit: appendAudit(a.audit, "finance", "master_budget", `${finance.categories.length} categories; reimbursements and budget requests open`) }, plan: { ...p, finance } };
+      },
+    },
+    {
+      label: "Logistics: day-of ops ready (run of show, meal deliveries, shipments, sponsor deliverables, prizes, incident routing)",
+      apply: (a, p) => {
+        const dayops = p.dayops ?? seedDayOps({ ...p, autopilot: a });
+        return { a: { ...a, audit: appendAudit(a.audit, "logistics", "dayops_ready", `${dayops.ros.length} run-of-show items, ${dayops.meals.length} meals, ${dayops.shipments.length} shipments, ${dayops.deliverables.length} sponsor deliverables`) }, plan: { ...p, dayops } };
+      },
+    },
   );
   return steps;
 }

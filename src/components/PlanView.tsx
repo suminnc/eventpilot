@@ -12,9 +12,11 @@ import { reselectVenue } from "@/lib/replan";
 import { ActionPlanTab } from "./ActionPlanTab";
 import { buildWorkflow } from "@/lib/workflow";
 import { SwarmTab } from "./SwarmTab";
+import { DayOpsTab } from "./DayOpsTab";
+import { FinanceTab } from "./FinanceTab";
 
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
-const TABS = ["Overview", "Team", "Plan of action", "Schedule", "Budget", "Venues", "Permits", "Invite", "Autopilot"] as const;
+const TABS = ["Overview", "Team", "Plan of action", "Day-of ops", "Schedule", "Budget", "Venues", "Permits", "Invite", "Autopilot"] as const;
 type Tab = (typeof TABS)[number];
 // Budget categories: sage, sky and earth tones that sit with the brand accent.
 const COLORS = ["#4f6146", "#7e9a6e", "#a9bc97", "#4d6b7d", "#86a3b4", "#bccdd8", "#8c7a5b", "#b8a07a", "#5f6570", "#a3a8b0"];
@@ -140,7 +142,14 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
           </ol>
         )}
 
-        {tab === "Budget" && <BudgetView plan={plan} />}
+        {tab === "Budget" && (
+          <div className="flex flex-col gap-8">
+            <BudgetView plan={plan} />
+            <FinanceTab plan={plan} onChange={onChange} />
+          </div>
+        )}
+
+        {tab === "Day-of ops" && <DayOpsTab plan={plan} onChange={onChange} />}
 
         {tab === "Venues" && (
           <div className="grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-3">

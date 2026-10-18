@@ -27,7 +27,7 @@ export type DayOps = {
   ros: RosItem[]; announcements: Announcement[]; incidents: Incident[]; payments: PaymentRequest[]; deliverables: Deliverable[];
   prizes: Prize[]; shipments: Shipment[]; meals: MealOrder[]; nudges: Nudge[];
   attendees: { registered: number; checkedIn: number; firstTimers: number; solo: number; teams: number; dietary: Record<string, number>; synthetic: true };
-  routing: Record<IncidentCategory, string>; organizers: string[]; director: string; log: OpsLog[];
+  routing: Record<IncidentCategory, string>; organizers: string[]; director: string; log: OpsLog[]; postmortemAt?: string;
 };
 export type Alert = { severity: Severity; title: string; detail: string; area: "logistics" | "money" | "incidents" | "sponsors" | "prizes" | "schedule"; ref: string };
 
@@ -44,7 +44,7 @@ export const SEVERITIES: Severity[] = ["low", "medium", "high", "critical"];
 
 export function kindOf(title: string): RosKind {
   const l = title.toLowerCase();
-  if (/breakfast|lunch|dinner|snack|brunch|meal|midnight/.test(l)) return "meal";
+  if (/breakfast|lunch|dinner|snack|brunch|meal|midnight|food|catering|pizza|buffet/.test(l)) return "meal";
   if (/ceremony|opening|closing|awards|keynote/.test(l)) return "ceremony";
   if (/workshop|talk|panel/.test(l)) return "workshop";
   if (/submission|judging|deadline|demo/.test(l)) return "deadline";
@@ -87,13 +87,8 @@ export function seedDayOps(plan: EventPlan): DayOps {
   const split = plan.ops?.meals[0]?.split ?? {};
   const totalSplit = Object.values(split).reduce((s, n) => s + n, 0) || 1;
   const dietary = Object.fromEntries(Object.entries(split).filter(([k]) => !/standard|regular|omni/i.test(k)).map(([k, n]) => [k, Math.round((n / totalSplit) * b.guests)]));
-  const contacts = plan.ops?.contacts ?? [];
-  const owner = (re: RegExp, fallback: string) => contacts.find((c) => re.test(c.role))?.role ?? fallback;
-  const director = owner(/director|lead organizer|event lead|host/i, "Event lead");
-  const routing: Record<IncidentCategory, string> = {
-    medical: owner(/medic|emt|safety/i, "Safety lead"), security: owner(/secur|safety/i, "Safety lead"), conduct: owner(/safety|conduct/i, "Safety lead"),
-    facilities: owner(/venue|facilit/i, "Venue lead"), lost_found: owner(/check-?in|info/i, "Check-in lead"), other: director,
-  };
+  const director = "Event lead";
+  const routing: Record<IncidentCategory, string> = { medical: "Safety lead", security: "Safety lead", conduct: "Safety lead", facilities: "Venue lead", lost_found: "Check-in lead", other: director };
   const organizers = [...new Set([director, ...Object.values(routing), "Finance lead", "Logistics lead"])];
   const due = (days: number) => addMin(`${b.date}T${b.startTime.padStart(5, "0")}`, -days * 1440);
   const deliverables: Deliverable[] = [];
@@ -126,7 +121,20 @@ export function seedDayOps(plan: EventPlan): DayOps {
   };
 }
 
-export const dayOpsOf = (plan: EventPlan): DayOps => plan.dayops ?? seedDayOps(plan);
+/** Vendors Autopilot booked after day-of ops was built get a balance-due payment request (deposit already paid). */
+export function refreshDayOps(plan: EventPlan, o: DayOps): DayOps {
+  const ap = plan.autopilot;
+  const fresh: PaymentRequest[] = [];
+  let id = nextId(o.payments);
+  for (const t of ap?.threads ?? []) {
+    if (t.status !== "booked" || !t.agreed || o.payments.some((p) => p.payee === t.vendor && p.source === `${t.category} balance`)) continue;
+    const amount = Math.max(0, t.agreed - (ap?.purchases.find((p) => p.id === t.purchaseId)?.amount ?? 0));
+    if (amount > 0) fresh.push({ id: id++, source: `${t.category} balance`, payee: t.vendor, amount, requestedBy: "Finance", status: "pending", approvals: [] });
+  }
+  return fresh.length ? { ...o, payments: [...o.payments, ...fresh] } : o;
+}
+
+export const dayOpsOf = (plan: EventPlan): DayOps => (plan.dayops ? refreshDayOps(plan, plan.dayops) : seedDayOps(plan));
 const logged = (o: DayOps, actor: string, action: string, detail: string): DayOps => ({ ...o, log: [{ at: nowIso(), actor, action, detail }, ...o.log].slice(0, 300) });
 const req = (actor: string) => {
   if (!actor.trim()) throw new Error("Who is doing this? A name is required.");

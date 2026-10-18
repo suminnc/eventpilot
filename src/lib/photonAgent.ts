@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import path from "path";
-import type { EventPlan, TextMessage, VendorThread } from "./types";
+import type { AgentEvent, EventPlan, TextMessage, VendorThread } from "./types";
 import { discoverLink, isLinked, organizerReplies, photonConfig, textOrganizer } from "./photon";
 import { applyReply, decisionText, planContext, refNum, untexted, help } from "./decisions";
 import { mailConfig, sendEmail } from "./mailer";
@@ -14,8 +14,8 @@ import { buildSwarm, swarmText, SWARM_NAME, SWARM_VERSION } from "./swarm";
 import { creaoConfig, runCreaoAgent } from "./creao";
 import { thisWeekText } from "./workflow";
 import { stakeholderText } from "./stakeholders";
-import { attentionText, dayOpsOf, localIso, reportIncident, shiftSchedule, type IncidentCategory, type Severity } from "./dayops";
-import { financeText } from "./finance";
+import { attentionText, checkIn, dayOpsOf, headcount, localIso, postmortem, reportIncident, shiftSchedule, type IncidentCategory, type Severity } from "./dayops";
+import { financeText, itemsOf, submitReimbursement, syncFinance } from "./finance";
 
 /**
  * Server-side Photon agent: polls the organizer's iMessages and acts on them even when no browser is open.
@@ -23,7 +23,7 @@ import { financeText } from "./finance";
  */
 
 type State = { rev: number; plan: EventPlan | null; thread: TextMessage[]; since: number; seen: string[]; mailSeen?: string[] };
-type Agent = { state: State; timer?: ReturnType<typeof setInterval>; polling: boolean; working: string | null; error?: string; notify?: ReturnType<typeof setTimeout>; mailTimer?: ReturnType<typeof setInterval>; mailPolling?: boolean; mailError?: string };
+type Agent = { state: State; timer?: ReturnType<typeof setInterval>; polling: boolean; working: string | null; error?: string; notify?: ReturnType<typeof setTimeout>; mailTimer?: ReturnType<typeof setInterval>; mailPolling?: boolean; mailError?: string; planning?: { title: string; prompt: string; events: AgentEvent[] } | null };
 
 const FILE = path.join(process.cwd(), ".data", "photon-agent.json");
 const g = globalThis as unknown as { __photonAgent?: Agent };
@@ -50,7 +50,7 @@ function setPlan(plan: EventPlan | null) {
 
 export function snapshot() {
   const a = agent();
-  return { rev: a.state.rev, plan: a.state.plan, thread: a.state.thread.slice(-80), working: a.working, error: a.error, linked: isLinked() };
+  return { rev: a.state.rev, plan: a.state.plan, thread: a.state.thread.slice(-80), working: a.working, error: a.error, linked: isLinked(), planning: a.planning ?? null };
 }
 
 /** Web app → server. Rejected (409) if the server changed since the client's last sync, so a text decision is never overwritten. */
@@ -159,7 +159,22 @@ function negotiationText(p: EventPlan, category?: string, recent: string[] = [])
   return `Negotiated ${money(negotiatedSavings(a))} off in total.\n${[...lines, ...extra].join("\n")}\nText NEGOTIATE <CATEGORY> for the back-and-forth, or NEGOTIATE <CATEGORY> TO <price> to counter.`;
 }
 
-const HELLO = `Hi, I'm EventPilot. Text PLAN and describe your event, e.g. "PLAN a 120-person founder mixer in SF next Friday, $15k". Then text RUN and I'll negotiate with vendors and book it, checking with you before big payments.`;
+const link = (prefix: string) => (process.env.APP_URL ? `${prefix}${process.env.APP_URL}` : "");
+const COMMANDS = [
+  "EventPilot by text, start to finish:",
+  "NEW <describe event>: plan a new event",
+  "RUN: Autopilot gets quotes, negotiates and books",
+  "SEND: email the vendor and permit drafts",
+  "YES n / NO n / ALL YES: approve or reject a payment",
+  "STATUS · VENDORS · NEGOTIATE <CATEGORY> TO <price>",
+  "TASKS · DONE <n> · WHATS NEXT",
+  "FINANCE · REIMBURSE <amount> <vendor> <what>",
+  "ATTENTION · INCIDENT <what happened> · DELAY <item> <min> · CHECKIN <n>",
+  "TEAM · CREAO · POSTMORTEM · LINK",
+  "Or just ask a question.",
+].join("\n");
+
+const HELLO = `Hi, I'm EventPilot. Text PLAN and describe your event, e.g. "PLAN a 120-person founder mixer in SF next Friday, $15k". Then text RUN and I'll negotiate with vendors and book it, checking with you before big payments. Text HELP for every command.${link(" Watch progress at ")}`;
 
 export async function handleInbound(text: string, id: string) {
   const a = agent();
@@ -170,25 +185,32 @@ export async function handleInbound(text: string, id: string) {
   const since = a.state.plan ? Date.parse(a.state.plan.createdAt) || 0 : 0;
   const history = a.state.thread.slice(0, -1).filter((m) => m.ts >= since).slice(-7).map(({ dir, body }) => ({ dir, body }));
 
-  const plan = t.match(/^(?:plan|new event|organi[sz]e)\b[\s:,-]+([\s\S]{6,})$/i);
+  if (/^(new|new (project|event|plan)|start (a )?new (project|event|plan)|plan|create( a)? (project|event))$/.test(low)) return reply(`Describe the event in one text, e.g. "NEW 120-person founder mixer in SF next Friday, $15k". I'll plan it, then run it with you by text.${link(" Watch it live at ")}`);
+  const plan = t.match(/^(?:plan|new|new (?:project|event|plan)|start (?:a )?new (?:project|event|plan)|create (?:a )?(?:project|event)|organi[sz]e)\b[\s:,-]+([\s\S]{6,})$/i);
   if (plan) {
-    await reply(`On it. My crew is planning that now (${getLLMConfig() ? "2–3 minutes" : "a few seconds"}). I'll text you the plan.`);
+    if (a.planning) return reply(`Still planning ${a.planning.title}. I'll text you when it's ready.`);
+    await reply(`On it. My crew is planning that now (${getLLMConfig() ? "2–3 minutes" : "a few seconds"}).${link(" Watch it live: ")} I'll text you the plan.`);
     a.working = "Planning a new event";
+    a.planning = { title: plan[1].trim().slice(0, 60), prompt: plan[1].trim(), events: [] };
     try {
-      const p = await runPlanner({ prompt: plan[1].trim() }, () => {});
+      const p = await runPlanner({ prompt: plan[1].trim() }, (e) => {
+        if (a.planning && e.type !== "plan") a.planning.events = [...a.planning.events, e].slice(-120);
+      });
       setPlan(p);
-      await reply(planSummary(p));
+      await reply(`${planSummary(p)}${link("\nOpen it: ")}\nText HELP anytime for everything you can do by text.`);
       if (autonomous()) void autoRun(p.id);
     } catch {
       await reply("Sorry, planning failed. Try again, or plan it in the app.");
     } finally {
       a.working = null;
+      a.planning = null;
     }
     return;
   }
 
   const p = a.state.plan;
   if (!p) return reply(HELLO);
+  if (/^(help|commands|menu|what can you do|options)$/.test(low)) return reply(COMMANDS + link("\nWebsite: "));
   const log = (q: EventPlan, actor: string, action: string, detail: string) => (q.autopilot ? { ...q, autopilot: { ...q.autopilot, audit: appendAudit(q.autopilot.audit, actor, action, detail) } } : q);
 
   if (/^(run|run autopilot|autopilot|go|book it|book|start|do it)$/.test(low)) {
@@ -251,6 +273,51 @@ export async function handleInbound(text: string, id: string) {
     return reply(`${head}${failed.length ? ` ${failed.length} failed and stay in drafts (${failed[0]}).` : ""} ${mail && sent.some((m) => /^(bookings|events)@/.test(m.to)) ? " I'll read the vendors' replies, negotiate, and text you when a deal needs your OK. Text VENDORS for status." : ""} Logged in the audit trail. Money still only moves on YES / PICK.`);
   }
 
+  if (/^(tasks|checklist|todos|open tasks)$/.test(low)) {
+    const open = p.tasks.map((x, i) => ({ x, i })).filter(({ x }) => !x.done);
+    return reply(open.length ? `${open.length} open of ${p.tasks.length} tasks:\n${open.slice(0, 10).map(({ x, i }) => `${i + 1}. ${x.title} (${x.owner}, due ${x.due})`).join("\n")}${open.length > 10 ? `\n…and ${open.length - 10} more on the website.` : ""}\nText DONE <number> when one is finished.` : "Every task is done.");
+  }
+  const doneM = low.match(/^(?:done|did|finished|complete|completed|check off)\s+(?:task\s+)?#?(.+)$/);
+  if (doneM) {
+    const num = /^\d+$/.test(doneM[1]) ? parseInt(doneM[1], 10) - 1 : -1;
+    const idx = num >= 0 ? num : p.tasks.findIndex((x) => !x.done && x.title.toLowerCase().includes(doneM[1]));
+    const task = p.tasks[idx];
+    if (!task) return reply(`No task matches "${doneM[1]}". Text TASKS for the numbered list.`);
+    if (task.done) return reply(`"${task.title}" is already done.`);
+    setPlan(log({ ...p, tasks: p.tasks.map((x, i) => (i === idx ? { ...x, done: true } : x)) }, "organizer", "task_done", `iMessage: ${task.title}`));
+    const left = p.tasks.filter((x) => !x.done).length - 1;
+    return reply(`Checked off "${task.title}". ${left} task${left === 1 ? "" : "s"} left.`);
+  }
+  const ciM = low.match(/^(?:check ?in|checked in|arrived)\s+\+?(\d+)$/);
+  if (ciM) {
+    try {
+      const o = checkIn(dayOpsOf(p), parseInt(ciM[1], 10), "Organizer (text)");
+      setPlan({ ...p, dayops: o });
+      const h = headcount(o);
+      return reply(`Checked in ${ciM[1]}: ${h.checkedIn.toLocaleString()} of ${h.registered.toLocaleString()} here. Meal counts now follow actual check-ins. Text ATTENTION for anything short.`);
+    } catch (e) {
+      return reply(e instanceof Error ? e.message : "Couldn't record that check-in.");
+    }
+  }
+  if (/^(postmortem|post-mortem|retro|wrap up|wrap-up|recap)$/.test(low)) {
+    const o = dayOpsOf(p);
+    const report = postmortem(p, o);
+    setPlan({ ...p, dayops: { ...o, postmortemAt: localIso(new Date()) } });
+    return reply(`${report.slice(0, 1400)}${report.length > 1400 ? "\n…full report on the website." : ""}`);
+  }
+  const rbM = t.match(/^reimburse(?:ment)?\s+\$?([\d,]+(?:\.\d{1,2})?)\s+(?:(?:at|from|to)\s+)?(\S+(?:\s\S+)?)\s*(?:for\s+)?([\s\S]*)$/i);
+  if (rbM) {
+    const amount = parseFloat(rbM[1].replace(/,/g, ""));
+    const f = p.finance ?? syncFinance(p);
+    const items = f.categories.flatMap(itemsOf);
+    const words = `${rbM[2]} ${rbM[3]}`.toLowerCase().split(/\W+/).filter((w) => w.length > 3);
+    const item = items.find((it) => words.some((w) => `${it.name} ${it.vendor}`.toLowerCase().includes(w))) ?? items.find((it) => /contingency|suppl|misc/i.test(it.name)) ?? items[0];
+    if (!item || !(amount > 0)) return reply("Text it like: REIMBURSE 85 Costco snacks for volunteers.");
+    const next = submitReimbursement(f, { name: "Organizer", email: "", team: "Organizer", itemId: item.id, vendor: rbM[2], purchaseDate: new Date().toISOString().slice(0, 10), amount, description: rbM[3] || rbM[2], receiptName: "", firstReimbursement: false, payee: true });
+    const r = next.reimbursements[0];
+    setPlan(log({ ...p, finance: next }, "organizer", "reimbursement", `${r.id} ${money(amount)} ${rbM[2]}`));
+    return reply(`Submitted ${r.id}: ${money(amount)} at ${rbM[2]}, charged to ${item.name}. Receipt check: ${r.check.verdict.toUpperCase()}${r.check.verdict !== "pass" ? ` (${r.check.checks.filter((c) => c.result !== "pass").map((c) => c.label).slice(0, 2).join("; ")})` : ""}. Attach the receipt on the website's Budget tab; finance and director approval happen there. Payout is simulated.`);
+  }
   if (/^(attention|ops|day of|day-of|dayof|day of ops|alerts|issues|whats wrong)$/.test(low)) return reply(attentionText(p));
   if (/^(finance|money|reimbursements?|budget requests?)$/.test(low)) return reply(financeText(p));
   const incM = t.trim().match(/^incident[:\s]+([\s\S]+)$/i);

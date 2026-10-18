@@ -23,11 +23,15 @@ export default function Home() {
   const [prompt, setPrompt] = useState(PRESETS[0].prompt);
   const [feedback, setFeedback] = useState("");
   const [saved, setSaved] = useState<EventPlan[]>([]);
-  const started = running || events.length > 0 || plan;
 
   useEffect(() => setSaved(loadPlans()), []);
   const refreshSaved = useCallback(() => setSaved(loadPlans()), []);
   const photon = usePhotonSync(plan, setPlan, refreshSaved);
+  const remote = !running && !plan ? photon.planning : null;
+  const shown = remote ? remote.events : events;
+  const busy = running || !!remote;
+  const started = running || events.length > 0 || plan || !!remote;
+  const active = !plan && photon.active ? saved.find((p) => p.id === photon.active!.id) : undefined;
   useEffect(() => {
     if (plan) {
       savePlan(plan);
@@ -98,6 +102,17 @@ export default function Home() {
             </div>
           </section>
 
+          {active && (
+            <section className="mx-auto max-w-[1200px] px-6 pt-10">
+              <button onClick={() => setPlan(active)} className="flex w-full items-center justify-between gap-4 rounded-2xl border border-line bg-surface px-5 py-4 text-left hover:border-foreground/30">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-accent">Running by iMessage</div>
+                  <div className="truncate text-[15px] font-medium text-foreground">{active.brief.title}</div>
+                </div>
+                <span className="shrink-0 text-[13px] font-medium text-accent">Open →</span>
+              </button>
+            </section>
+          )}
           <section className="mx-auto max-w-[1200px] px-6 pt-16">
             <h2 className="section-head">Plan anything</h2>
             <div className="grid grid-cols-[minmax(0,1fr)] gap-6 pt-5 sm:grid-cols-3">
@@ -145,12 +160,12 @@ export default function Home() {
                   <RotateCcw size={12} /> New event
                 </button>
               </div>
-              <AgentRoster events={events} running={running} />
+              <AgentRoster events={shown} running={busy} />
             </div>
             <div>
               <h2 className="section-head">Live reasoning trace</h2>
               <div className="pt-3.5">
-                <AgentTrace events={events} running={running} />
+                <AgentTrace events={shown} running={busy} />
               </div>
             </div>
             {plan && (
@@ -182,7 +197,7 @@ export default function Home() {
               <div className="grid min-h-[420px] place-items-center rounded-2xl border border-line p-10 text-center text-muted">
                 <div>
                   <Bot size={28} className="mx-auto mb-3 animate-pulse text-accent" />
-                  The crew is assembling your plan…
+                  {remote ? `Planning "${remote.title}" from your text…` : "The crew is assembling your plan…"}
                 </div>
               </div>
             )}

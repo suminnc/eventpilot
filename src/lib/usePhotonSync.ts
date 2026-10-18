@@ -1,10 +1,10 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import type { EventPlan, TextMessage } from "./types";
+import type { AgentEvent, EventPlan, TextMessage } from "./types";
 import { savePlan } from "./storage";
 
 export type Live = { configured: boolean; platform?: string; agent?: string; organizer?: string; linked?: boolean; error?: string; working?: string | null };
-export type PhotonState = { live: Live | null; thread: TextMessage[] };
+export type PhotonState = { live: Live | null; thread: TextMessage[]; planning?: { title: string; events: AgentEvent[] } | null; active?: { id: string; title: string } | null };
 
 export const PhotonContext = createContext<PhotonState>({ live: null, thread: [] });
 export const usePhoton = () => useContext(PhotonContext);
@@ -36,9 +36,9 @@ export function usePhotonSync(plan: EventPlan | null, setPlan: (p: EventPlan) =>
       if (pushing.current || timer.current) return;
       try {
         const r = await fetch(`/api/photon?rev=${rev.current}`);
-        const j = (await r.json()) as { live: Live; rev?: number; thread?: TextMessage[]; plan?: EventPlan | null };
+        const j = (await r.json()) as { live: Live; rev?: number; thread?: TextMessage[]; plan?: EventPlan | null; planning?: PhotonState["planning"]; active?: PhotonState["active"] };
         if (stop || pushing.current || timer.current) return;
-        setState({ live: j.live, thread: j.thread ?? [] });
+        setState({ live: j.live, thread: j.thread ?? [], planning: j.planning ?? null, active: j.active ?? null });
         if (!j.live?.configured || typeof j.rev !== "number" || j.rev === rev.current) return;
         const first = rev.current === -1;
         rev.current = j.rev;

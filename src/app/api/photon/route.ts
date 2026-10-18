@@ -21,7 +21,7 @@ export async function GET(req: Request) {
   startPhotonAgent();
   const s = snapshot();
   const rev = Number(new URL(req.url).searchParams.get("rev"));
-  return Response.json({ live: l, rev: s.rev, thread: s.thread, ...(rev === s.rev ? {} : { plan: s.plan }) });
+  return Response.json({ live: l, rev: s.rev, thread: s.thread, planning: s.planning, active: s.plan ? { id: s.plan.id, title: s.plan.brief.title } : null, ...(rev === s.rev ? {} : { plan: s.plan }) });
 }
 
 /** POST { plan, rev } → make this the active plan the Photon agent acts on. 409 + server plan if it changed in the meantime. */

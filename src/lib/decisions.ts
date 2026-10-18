@@ -106,13 +106,14 @@ export function applyReply(plan: EventPlan, text: string, via: string): { plan: 
 export function planContext(plan: EventPlan): string {
   const b = plan.brief;
   const a = plan.autopilot;
-  const v = plan.venues[0];
+  const v = plan.venues[plan.selectedVenue] ?? plan.venues[0];
   const o = plan.ops;
   const L = [
+    `This is the only event being run by text right now. If the organizer asks about a different event by name (not ${plan.brief.title}), say you're only running ${plan.brief.title} by text and they can text NEW plus a description to start that one; never answer with this event's vendors instead.`,
     `Event: ${b.title} · ${b.eventType} · ${b.city} · ${b.date} ${b.startTime} · ${b.durationHours}h · ${b.guests} guests · budget ${money(b.budget)} · vibe ${b.vibe}`,
     b.constraints.length ? `Constraints: ${b.constraints.join(", ")}` : "",
     v ? `Venue: ${v.name} (${v.neighborhood}, cap ${v.capacity}, ${money(v.pricePerHour)}/hr, ${v.indoor ? "indoor" : "outdoor"}). Why: ${v.why}` : "",
-    plan.venues.length > 1 ? `Alternate venues: ${plan.venues.slice(1).map((x) => `${x.name} (cap ${x.capacity}, ${money(x.pricePerHour)}/hr)`).join("; ")}` : "",
+    plan.venues.length > 1 ? `Alternate venues: ${plan.venues.filter((x) => x !== v).map((x) => `${x.name} (cap ${x.capacity}, ${money(x.pricePerHour)}/hr)`).join("; ")}` : "",
     plan.weather ? `Weather: ${plan.weather.summary}` : "",
     `Budget: ${plan.budget.map((l) => `${l.category} ${money(l.amount)}`).join(", ")}`,
     `Schedule: ${plan.schedule.slice(0, 16).map((x) => `${x.day ? `D${x.day} ` : ""}${x.time} ${x.title}`).join("; ")}`,

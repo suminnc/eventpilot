@@ -330,6 +330,44 @@ export function respond(plan: EventPlan, id: string, text: string, r: Parsed, an
   return { plan: withThreads(p, cur.map((x) => (x.id === t.id ? t : x))), emails, texts, send };
 }
 
+const lastTouch = (t: VendorThread) => Math.max(t.lastOut, t.log.at(-1)?.ts ?? 0);
+
+/** The vendor thread an organizer means ("venue", "boutique hotel", "it" = the most recent open one). */
+export function findThread(plan: EventPlan, term?: string, recent: string[] = []): VendorThread | undefined {
+  const ts = plan.autopilot?.threads ?? [];
+  const q = (term ?? "").toLowerCase().replace(/^(the|our)\s+/, "").trim();
+  if (q && q !== "it" && q !== "that") {
+    const words = q.split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !["the", "and", "for"].includes(w));
+    const score = (t: VendorThread) => {
+      const hay = `${t.category} ${t.vendor}`.toLowerCase();
+      return hay.includes(q) ? 100 : words.filter((w) => hay.includes(w)).length;
+    };
+    const best = [...ts].sort((a, b) => score(b) - score(a) || lastTouch(b) - lastTouch(a))[0];
+    return best && score(best) > 0 ? best : undefined;
+  }
+  for (const body of [...recent].reverse()) {
+    const hit = ts.find((t) => body.toLowerCase().includes(t.vendor.toLowerCase()));
+    if (hit) return hit;
+  }
+  return [...ts].sort((a, b) => Number(b.status !== "booked") - Number(a.status !== "booked") || lastTouch(b) - lastTouch(a))[0];
+}
+
+/** Organizer-directed counter-offer: reopens the thread (even after a decline) and emails the vendor the organizer's price. */
+export function counterOffer(plan: EventPlan, id: string, price: number): Effects {
+  const a = plan.autopilot;
+  const t0 = a?.threads?.find((x) => x.id === id);
+  if (!a || !t0) return { plan, emails: [], texts: [] };
+  if (t0.status === "booked") return { plan, emails: [], texts: [`${t0.vendor} is already booked for ${t0.category} at ${money(t0.agreed ?? t0.target)}, so I won't reopen a confirmed deal.`] };
+  const offer = Math.round(price);
+  const was = t0.agreed ?? t0.theirPrice;
+  const body = `Hi ${t0.vendor} team,\n\n${t0.status === "declined" ? `Following up on ${plan.brief.title} on ${plan.brief.date}: we'd still love to work with you.` : `Thanks again for working with us on ${plan.brief.title}.`} ${was ? `Before we commit at ${money(was)}, could` : "Could"} you do ${money(offer)} total for ${t0.category.toLowerCase()}? If so, we can confirm right away with a deposit.\n\n${sig(plan)}`;
+  const pend = a.purchases.find((x) => x.id === t0.purchaseId && x.status === "pending");
+  const purchases = pend ? a.purchases.map((x) => (x === pend ? { ...x, status: "canceled" as const, reason: `Renegotiating at ${money(offer)}` } : x)) : a.purchases;
+  const t: VendorThread = { ...t0, status: "negotiating", offer, ceiling: Math.max(t0.ceiling, offer), agreed: undefined, purchaseId: pend ? undefined : t0.purchaseId, rounds: Math.min(t0.rounds, MAX_ROUNDS - 1), followups: 0, lastOut: Date.now(), log: [...t0.log, { dir: "out", ts: Date.now(), body, price: offer }] };
+  const next = withThreads({ ...plan, autopilot: { ...a, purchases } }, (a.threads ?? []).map((x) => (x.id === id ? t : x)), { actor: "negotiator", action: "counter", detail: `${t.vendor}: organizer asked for ${money(offer)}${was ? ` (was ${money(was)})` : ""}` });
+  return { plan: next, emails: [{ threadId: id, body }], texts: [`Emailed ${t.vendor} asking for ${money(offer)} for ${t.category.toLowerCase()}${was ? ` (they're at ${money(was)})` : ""}${pend ? `; I canceled the pending ${money(pend.amount)} deposit until they answer` : ""}. I'll text you when they reply.`] };
+}
+
 /** Nudges quiet vendors, then flags them to the organizer. */
 export function followUps(plan: EventPlan, now: number, minutes: number): Effects {
   const threads = plan.autopilot?.threads ?? [];

@@ -122,6 +122,7 @@ export function planContext(plan: EventPlan): string {
     L.push(
       `Spend mandate: total cap ${money(a.mandate.totalCap)}, per purchase ${money(a.mandate.perPurchaseCap)}, organizer approves above ${money(a.mandate.approvalThreshold)}, allowed ${a.mandate.allowedCategories.join(", ")}. Committed ${money(committed(a.purchases))}.`,
       `Purchases: ${a.purchases.map((p) => `${ref(p)} ${p.purpose} · ${p.vendor} · ${money(p.amount)} · ${p.status}${p.card ? ` · ${p.card}` : ""} (${p.reason})`).join("; ")}`,
+      `Vendor email threads: ${(a.threads ?? []).map((t) => `${t.category} · ${t.vendor} · ${t.status}${t.agreed ? ` · agreed ${money(t.agreed)}` : t.theirPrice ? ` · they asked ${money(t.theirPrice)}` : ""}${t.offer ? ` · our offer ${money(t.offer)}` : ""}`).join("; ") || "none yet"}`,
       ...(a.shortlists ?? []).map(
         (sl) =>
           `${sl.category} quotes (pick #${sl.pick + 1}, why: ${sl.why}): ${sl.quotes.map((q, i) => `${i + 1}. ${q.vendor} ${money(q.price)}${q.listPrice && q.listPrice > q.price ? ` (negotiated from ${money(q.listPrice)})` : ""} ★${q.rating} ${q.leadDays}d lead ${q.cancellable ? "free cancel" : "non-refundable"}${q.tags.length ? ` [${q.tags.join(", ")}]` : ""}${q.note ? ` – ${q.note}` : ""}`).join("; ")}`,

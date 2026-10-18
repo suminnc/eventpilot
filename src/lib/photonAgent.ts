@@ -5,7 +5,7 @@ import { discoverLink, isLinked, organizerReplies, photonConfig, textOrganizer }
 import { applyReply, decisionText, planContext, refNum, untexted } from "./decisions";
 import { mailConfig, sendEmail } from "./mailer";
 import { fetchReplies } from "./mailbox";
-import { answerVendor, interpret, matchThread, openThread, respond, followUps, settle, threadsText, type Effects } from "./vendorDeals";
+import { answerVendor, interpret, matchThread, openThread, respond, followUps, settle, threadsText, type Effects, counterOffer, findThread } from "./vendorDeals";
 import { sendMessage, isAutoDraft, appendAudit, committed, defaultMandate, emptyAutopilot, negotiatedSavings, planSteps } from "./autopilot";
 import { runPlanner } from "./agents/orchestrator";
 import { answerQuestion } from "./answer";
@@ -223,6 +223,18 @@ export async function handleInbound(text: string, id: string) {
     return reply(`${head}${failed.length ? ` ${failed.length} failed and stay in drafts (${failed[0]}).` : ""} ${mail && sent.some((m) => /^(bookings|events)@/.test(m.to)) ? " I'll read the vendors' replies, negotiate, and text you when a deal needs your OK. Text VENDORS for status." : ""} Logged in the audit trail. Money still only moves on YES / PICK.`);
   }
 
+  const amt = (x: string) => parseFloat(x.replace(/[$,]/g, "")) * (/k$/.test(x) ? 1000 : 1);
+  const ctr = low.match(/^(?:negotiate|counter|offer|ask|get|bring)\s+(?:(.+?)\s+)?(?:down\s+)?(?:to|for|at)\s+(\$?[\d,]+(?:\.\d+)?k?)$/);
+  const ctr2 = low.match(/^(\$?[\d,]+(?:\.\d+)?k?)\s+(?:for|on)\s+(.+)$/);
+  const cm = ctr ? { term: ctr[1], price: amt(ctr[2]) } : ctr2 ? { term: ctr2[2], price: amt(ctr2[1]) } : null;
+  if (cm && cm.price >= 50 && p.autopilot?.threads?.length) {
+    const th = findThread(p, cm.term, history.slice(-6).map((h) => h.body));
+    if (!th) return reply(`I don't have a vendor conversation matching "${cm.term}". Text VENDORS to see them.`);
+    const fx = counterOffer(p, th.id, cm.price);
+    const msg = fx.texts.join(" ");
+    await applyEffects({ ...fx, texts: [] }, `ctr-${id}`);
+    return reply(msg);
+  }
   const neg = low.match(/^(?:negotiate|negotiation|savings|deals?)(?:\s+([a-z &]+))?$/);
   if (neg) return reply(p.autopilot ? negotiationText(p, neg[1]?.trim()) : "I haven't negotiated yet. Text RUN and I'll get quotes and haggle first.");
 

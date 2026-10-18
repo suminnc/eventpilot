@@ -1,3 +1,4 @@
+import { eventWindow } from "./dayops";
 import type { EventPlan, OutboxMessage } from "./types";
 
 /**
@@ -123,7 +124,7 @@ export function autoProgress(plan: EventPlan): { done: Set<string>; active: Set<
   mark("guide", sentAll(guide), guide.length > 0);
   const ops = plan.dayops, fin = plan.finance;
   mark("event", false, !!ops);
-  mark("retro", !!ops?.postmortemAt, false);
+  mark("retro", !!ops?.postmortemAt && ops.postmortemAt >= eventWindow(plan).end, false);
   const openFin = (fin?.reimbursements ?? []).some((r) => r.status !== "Paid" && r.status !== "Denied") || (fin?.requests ?? []).some((r) => r.status === "Waiting on director");
   mark("close", !!ops && ops.payments.length > 0 && ops.payments.every((p) => p.status === "paid" || p.status === "rejected") && !openFin, !!ops && (ops.payments.some((p) => p.status !== "pending") || !!fin?.reimbursements.length));
   return { done, active };

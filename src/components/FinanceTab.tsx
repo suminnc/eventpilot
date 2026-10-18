@@ -45,9 +45,9 @@ export function FinanceTab({ plan, onChange }: { plan: EventPlan; onChange: (p: 
   return (
     <div className="flex flex-col gap-6">
       <div className="card flex flex-wrap items-center justify-between gap-3 p-4">
-        <div className="grid flex-1 grid-cols-2 gap-4 sm:grid-cols-4">
+        <div className="grid w-full grid-cols-2 gap-4 sm:w-auto sm:flex-1 sm:grid-cols-4">
           {[["Allocated", t.allocated], ["Committed", t.actualCost], ["Spent", t.spent], ["Left", t.left]].map(([k, v]) => (
-            <div key={k as string}><p className="text-[12px] text-muted">{k}</p><p className="font-display text-xl font-semibold tabular-nums">{money(v as number)}</p></div>
+            <div key={k as string}><p className="text-[12px] text-muted">{k}</p><p className="font-display text-lg font-semibold tabular-nums sm:text-xl">{money(v as number)}</p></div>
           ))}
         </div>
         <label className="flex items-center gap-2 text-sm">

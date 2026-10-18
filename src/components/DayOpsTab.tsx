@@ -83,14 +83,16 @@ export function DayOpsTab({ plan, onChange }: { plan: EventPlan; onChange: (p: E
         <div className="flex flex-col divide-y divide-line">
           {o.ros.map((r) => (
             <div key={r.id} className={`flex flex-wrap items-center gap-3 py-2 text-sm ${live.includes(r.id) ? "bg-accent-soft/60 -mx-2 rounded-lg px-2" : ""}`}>
-              <span className="w-24 shrink-0 tabular-nums text-muted">D{r.day} {t(r.startsAt)}–{t(r.endsAt)}</span>
+              <span className="w-28 shrink-0 whitespace-nowrap tabular-nums text-muted">D{r.day} {t(r.startsAt)}–{t(r.endsAt)}</span>
               <span className="min-w-0 flex-1 font-medium">{r.title}{live.includes(r.id) && <span className="ml-2 rounded-md bg-accent px-1.5 py-0.5 text-[10px] font-semibold uppercase text-white">live</span>}{next[0] === r.id && <span className="ml-2 text-[11px] text-muted">up next</span>}</span>
               {r.delayMin !== 0 && <span className="text-[12px] text-warning">{r.delayMin > 0 ? "+" : ""}{r.delayMin} min</span>}
+              <span className="ml-auto flex shrink-0 items-center gap-1">
               <select className="input py-1 text-[13px]" value={r.status} onChange={(e) => act((x) => setRosStatus(x, r.id, e.target.value as typeof r.status, me))} aria-label={`Status for ${r.title}`}>
                 {["planned", "live", "done", "delayed", "cancelled"].map((s) => <option key={s}>{s}</option>)}
               </select>
               <button className="btn-ghost px-2 py-1 text-[12px]" onClick={() => act((x) => shiftSchedule(x, r.id, 15, "day", me).ops)} title="Push this and everything after it today by 15 minutes">+15 rest of day</button>
               <button className="btn-ghost px-2 py-1 text-[12px]" onClick={() => act((x) => shiftSchedule(x, r.id, 15, "item", me).ops)}>+15 this</button>
+              </span>
             </div>
           ))}
         </div>
@@ -178,14 +180,21 @@ export function DayOpsTab({ plan, onChange }: { plan: EventPlan; onChange: (p: E
       <section className="card p-5">
         <h3 className="section-head mb-3">Sponsor deliverables</h3>
         {o.deliverables.length ? (
-          <div className="grid gap-x-6 sm:grid-cols-2">
-            {o.deliverables.map((d) => (
-              <label key={d.id} className="flex items-center gap-2 border-t border-line py-2 text-sm">
-                <input type="checkbox" checked={d.status === "done"} onChange={(e) => act((x) => setDeliverable(x, d.id, e.target.checked ? "done" : "todo", me))} className="accent-[#4f6146]" />
-                <span className="min-w-0 flex-1">{d.sponsor} · {d.description}</span>
-                <span className={`text-[12px] ${d.status === "todo" && d.dueAt < now ? "text-danger" : "text-muted"}`}>{d.dueAt.slice(5, 10)}</span>
-              </label>
-            ))}
+          <div className="flex flex-col">
+            {[...new Set(o.deliverables.map((d) => d.sponsor))].map((sp) => {
+              const ds = o.deliverables.filter((d) => d.sponsor === sp);
+              return (
+                <div key={sp} className="flex flex-wrap items-center gap-2 border-t border-line py-2 text-sm">
+                  <span className="w-44 shrink-0 font-medium">{sp} <span className="text-[12px] text-muted">{ds.filter((d) => d.status === "done").length}/{ds.length}</span></span>
+                  {ds.map((d) => (
+                    <label key={d.id} title={`${d.description} · due ${d.dueAt.replace("T", " ")}`} className={`flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-[12px] ${d.status === "done" ? "border-success/40 bg-success-soft text-success" : d.dueAt < now ? "border-danger/40 text-danger" : "border-line text-muted"}`}>
+                      <input type="checkbox" checked={d.status === "done"} onChange={(e) => act((x) => setDeliverable(x, d.id, e.target.checked ? "done" : "todo", me))} className="accent-[#4f6146]" />
+                      {d.kind} · {d.dueAt.slice(5, 10)}
+                    </label>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         ) : <p className="text-sm text-muted">No sponsors in this plan.</p>}
       </section>

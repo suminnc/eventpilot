@@ -117,7 +117,7 @@ async function scout(ctx: Ctx, brief: EventBrief): Promise<Venue[]> {
             llm,
             `You are the Venue Scout agent. List 8 real, currently operating venues in or near the event's city that could host this event. Use each venue's exact official name (no invented or generic names). If the brief names a venue, include it first. For each give a realistic capacity for this format and a typical rental price per hour in USD (estimate). Return {"venues":[{"name","neighborhood","capacity","pricePerHour","style","indoor"}]}.`,
             `Brief: ${briefJSON(brief)}${fb(ctx)}\nOriginal request: ${brief.prompt}`,
-            { timeoutMs: 45_000 },
+            { timeoutMs: 100_000 },
           ).then((r) => (Array.isArray(r.venues) ? r.venues : []).filter((v) => v && typeof v.name === "string").map((v) => ({ ...v, capacity: Math.max(1, Number(v.capacity) || 0), pricePerHour: Math.max(0, Number(v.pricePerHour) || 0), indoor: v.indoor !== false, neighborhood: String(v.neighborhood ?? ""), style: String(v.style ?? "Venue") })))
       : undefined;
     const search = await tool(
@@ -127,6 +127,7 @@ async function scout(ctx: Ctx, brief: EventBrief): Promise<Venue[]> {
       (r) => `${r.source}: ${r.venues.map((v) => `${v.name} (${v.capacity} cap, ~${money(v.pricePerHour)}/hr)`).join("; ")}${r.dropped.length ? ` · dropped (not found on map): ${r.dropped.join(", ")}` : ""}`,
     );
     const found = search.venues;
+    if (search.aiError) think(ctx, "venue", `My own venue suggestions failed (${search.aiError}); using the live map search only.`);
     if (search.dropped.length) think(ctx, "venue", `Couldn't verify ${search.dropped.length} suggested venue${search.dropped.length === 1 ? "" : "s"} on OpenStreetMap, so I dropped ${search.dropped.length === 1 ? "it" : "them"}.`);
     think(ctx, "venue", "Rental prices are typical estimates; the venue confirms the real quote during outreach.");
     return withLLM(ctx, "venue",

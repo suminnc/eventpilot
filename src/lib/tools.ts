@@ -135,7 +135,7 @@ async function geocode(city: string): Promise<Geo | null> {
 
 type PhotonHit = { geometry: { coordinates: [number, number] }; properties: { name?: string; osm_type: string; osm_id: number; osm_value: string; street?: string; housenumber?: string; district?: string; city?: string } };
 const osmUrl = (t: string, id: number) => `https://www.openstreetmap.org/${{ N: "node", W: "way", R: "relation" }[t] ?? "node"}/${id}`;
-const addr = (p: PhotonHit["properties"]) => [p.housenumber && p.street ? `${p.housenumber} ${p.street}` : p.street, p.district ?? p.city].filter(Boolean).join(", ");
+const addr = (p: PhotonHit["properties"]) => [p.housenumber && p.street ? `${p.housenumber} ${p.street}` : p.street, p.city ?? p.district].filter(Boolean).join(", ");
 
 /** Checks a venue name against OpenStreetMap near the city; returns its real address + map link, or null if it can't be found. */
 async function verifyPlace(name: string, geo: Geo) {
@@ -179,7 +179,7 @@ function kindsFor(words: string, guests: number): [string, string][] {
   return k.slice(0, 2);
 }
 
-export type VenueSearch = { venues: Venue[]; checked: number; dropped: string[]; source: string };
+export type VenueSearch = { venues: Venue[]; checked: number; dropped: string[]; source: string; aiError?: string };
 
 /**
  * Live venue search, run fresh for every plan: the AI proposes real venues it knows in the city, each one is checked
@@ -195,9 +195,10 @@ export async function venueSearchTool(
   const dropped: string[] = [];
   let pool: Cand[] = [];
   let checked = 0;
+  let aiError: string | undefined;
   if (geo) {
     const [ai, ...maps] = await Promise.all([
-      propose ? propose().catch(() => [] as Omit<Venue, "why" | "url">[]) : Promise.resolve([] as Omit<Venue, "why" | "url">[]),
+      propose ? propose().catch((e: Error) => ((aiError = e.message.slice(0, 120)), [] as Omit<Venue, "why" | "url">[])) : Promise.resolve([] as Omit<Venue, "why" | "url">[]),
       ...kindsFor(words, guests).map(([k, l], i) => new Promise<Cand[]>((r) => setTimeout(r, i * 1100)).then(() => mapListing(k, l, city, geo))),
     ]);
     checked = ai.length;
@@ -206,7 +207,8 @@ export async function venueSearchTool(
       if (real) pool.push({ ...v, neighborhood: real.address || v.neighborhood, url: real.url, source: "ai" });
       else dropped.push(v.name);
     }
-    for (const m of maps.flat()) if (!pool.some((p) => sameName(p.name, m.name))) pool.push(m);
+    const key = (v: Cand) => v.neighborhood.split(",")[0].trim().toLowerCase();
+    for (const m of maps.flat()) if (!pool.some((p) => sameName(p.name, m.name) || (/^\d/.test(key(m)) && key(p) === key(m)))) pool.push(m);
   }
   const region = regionFor(city);
   const fromCatalog = !pool.length && !!region;
@@ -229,6 +231,7 @@ export async function venueSearchTool(
     venues: ranked,
     checked,
     dropped,
+    aiError,
     source: fromCatalog
       ? "Live search found nothing; used curated real venues"
       : geo ? `OpenStreetMap search around ${geo.name}${checked ? ` + ${checked} AI-suggested venues checked` : ""}` : "City not found",

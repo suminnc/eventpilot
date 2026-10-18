@@ -28,7 +28,7 @@ export type PlanRequest = {
   previous?: EventPlan;
 };
 
-type Ctx = { llm: LLMConfig | null; emit: Emit; feedback?: string };
+type Ctx = { llm: LLMConfig | null; emit: Emit; feedback?: string; fallbacks?: string[] };
 
 const now = () => Date.now();
 
@@ -55,7 +55,8 @@ async function withLLM<T>(ctx: Ctx, agent: AgentId, offline: () => T, online?: (
   try {
     return await online(ctx.llm);
   } catch (err) {
-    think(ctx, agent, `LLM call failed (${(err as Error).message.slice(0, 80)}); using built-in planner.`);
+    ctx.fallbacks = [...(ctx.fallbacks ?? []), `${agent}: ${(err as Error).message}`];
+    think(ctx, agent, `Model call failed (${(err as Error).message.slice(0, 80)}); used built-in estimates for this part.`);
     return offline();
   }
 }
@@ -408,6 +409,6 @@ export async function runPlanner(req: PlanRequest, emit: Emit): Promise<EventPla
     model: llm?.model ?? "offline-heuristics",
   };
   const review = await critic(ctx, draft);
-  if (llm) think(ctx, "coordinator", `Done: ${llm.usage.calls} model calls, ${llm.usage.promptTokens.toLocaleString()} input + ${llm.usage.completionTokens.toLocaleString()} output tokens.`);
+  if (llm) think(ctx, "coordinator", `Done: ${llm.usage.calls} model calls, ${llm.usage.promptTokens.toLocaleString()} input + ${llm.usage.completionTokens.toLocaleString()} output tokens.${ctx.fallbacks?.length ? ` ${ctx.fallbacks.length} part(s) used built-in estimates: ${ctx.fallbacks.join("; ")}.` : " Every agent used the model."}`);
   return { ...draft, ...review, usage: llm ? { ...llm.usage } : undefined };
 }

@@ -3,11 +3,12 @@ import path from "path";
 import type { EventPlan, TextMessage } from "./types";
 import { discoverLink, isLinked, organizerReplies, photonConfig, textOrganizer } from "./photon";
 import { applyReply, decisionText, planContext, refNum, untexted } from "./decisions";
-import { appendAudit, committed, defaultMandate, emptyAutopilot, negotiatedSavings, planSteps } from "./autopilot";
+import { sendMessage, appendAudit, committed, defaultMandate, emptyAutopilot, negotiatedSavings, planSteps } from "./autopilot";
 import { runPlanner } from "./agents/orchestrator";
 import { answerQuestion } from "./answer";
 import { getLLMConfig } from "./llm";
 import { thisWeekText } from "./workflow";
+import { stakeholderText } from "./stakeholders";
 
 /**
  * Server-side Photon agent: polls the organizer's iMessages and acts on them even when no browser is open.
@@ -171,6 +172,19 @@ export async function handleInbound(text: string, id: string) {
   }
 
   if (/^(this week|week|workflow|todo|to do|whats due|timeline)$/.test(low)) return reply(thisWeekText(p));
+  if (/^(stakeholders?|perspectives?|(attendee|sponsor|vendor|organizer|guest)s?( view| side| experience)?)$/.test(low)) return reply(stakeholderText(p));
+  if (/^(open( the)? app|app|link|url|website|where( is| do i see)? (it|the app))$/.test(low)) {
+    return reply(process.env.APP_URL ? `Open EventPilot: ${process.env.APP_URL}` : "Open EventPilot in your browser where it's running (e.g. http://localhost:3000). Everything you do by text shows up there.");
+  }
+  if (/^(send|send all|send them|send it|send drafts|send emails|send the emails|do it for me|go ahead and send|file permits|file them)$/.test(low)) {
+    const drafts = p.autopilot?.outbox.filter((m) => m.status === "draft") ?? [];
+    if (!drafts.length) return reply(p.autopilot ? "Nothing to send: every email and permit draft is already out." : "No drafts yet. Text RUN and I'll prepare vendor emails and permit filings.");
+    let q = drafts.reduce((acc, m) => sendMessage(acc, m.id), p);
+    q = log(q, "organizer", "text_command", `iMessage: "${t.slice(0, 40)}"`);
+    setPlan(q);
+    const shown = drafts.slice(0, 4).map((m) => `${m.subject} → ${m.to}`).join("; ");
+    return reply(`Sent ${drafts.length} draft${drafts.length > 1 ? "s" : ""} (simulated): ${shown}${drafts.length > 4 ? ` and ${drafts.length - 4} more` : ""}. Logged in the audit trail. Money still only moves on YES / PICK.`);
+  }
 
   const neg = low.match(/^(?:negotiate|negotiation|savings|deals?)(?:\s+([a-z &]+))?$/);
   if (neg) return reply(p.autopilot ? negotiationText(p, neg[1]?.trim()) : "I haven't negotiated yet. Text RUN and I'll get quotes and haggle first.");

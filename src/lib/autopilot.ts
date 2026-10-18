@@ -406,4 +406,4 @@ export function refund(plan: EventPlan, id: string): EventPlan {
   };
 }
 
-const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 24);
+const slug = (s: string) => s.split(/\s+(?:at|@|-|–|\|)\s+|,/i)[0].toLowerCase().replace(/^the\s+/, "").replace(/[^a-z0-9]+/g, "").slice(0, 30) || "vendor";

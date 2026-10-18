@@ -24,7 +24,7 @@ export function opsPlan(brief: EventBrief, schedule: ScheduleItem[], venue: Venu
   const volunteerSlots = shifts.reduce((s, x) => s + x.volunteers, 0);
   const volunteers = shifts.length > 1 ? ceil(volunteerSlots / 2) : volunteerSlots;
 
-  const checkWindow = g > 500 ? 60 : 30;
+  const checkWindow = g > 500 ? 45 : 15;
   const lanes = small ? 0 : Math.max(1, ceil(g / (2 * checkWindow)));
   const checkin = small
     ? { lanes: 0, minutes: 0, note: "No check-in desk needed; the host greets guests." }

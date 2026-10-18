@@ -18,7 +18,8 @@ export function getLLMConfig(): LLMConfig | null {
     apiKey,
     baseUrl: (process.env.LLM_BASE_URL || "https://api.stepfun.ai/v1").replace(/\/$/, ""),
     model: process.env.LLM_MODEL || "step-5-preview",
-    maxTokens: Number(process.env.LLM_MAX_TOKENS) || 4000,
+    // Only a cap (you pay for tokens used); too low a cap truncates JSON and wastes the whole call.
+    maxTokens: Number(process.env.LLM_MAX_TOKENS) || 8000,
     // Reasoning tokens count toward output; "low" cuts them ~3x on step-5-preview. Set "" to omit.
     reasoningEffort: process.env.LLM_REASONING_EFFORT ?? "low",
     usage: { calls: 0, promptTokens: 0, completionTokens: 0 },
@@ -29,7 +30,35 @@ export async function chatJSON<T>(
   cfg: LLMConfig,
   system: string,
   user: string,
-  { temperature = 0.6, timeoutMs = 90000 }: { temperature?: number; timeoutMs?: number } = {},
+  opts: { temperature?: number; timeoutMs?: number } = {},
+): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await chatOnce<T>(cfg, system, user, opts);
+    } catch (err) {
+      // Retry once on transient failures (rate limit, server error, timeout); never on auth/credit/length errors.
+      const m = (err as Error).message;
+      if (attempt >= 1 || !/LLM (429|5\d\d)|abort|fetch failed|ECONNRESET/i.test(m)) throw new Error(explainLLMError(m));
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+}
+
+export function explainLLMError(m: string): string {
+  if (/LLM 402|insufficient|balance|quota|credit/i.test(m)) return "out of model credit";
+  if (/LLM 401|LLM 403/.test(m)) return "API key rejected";
+  if (/LLM 429/.test(m)) return "rate limited by the model provider";
+  if (/max_tokens/.test(m)) return "response too long";
+  if (/abort/i.test(m)) return "model timed out";
+  if (/JSON/.test(m)) return "model returned malformed JSON";
+  return m.slice(0, 80);
+}
+
+async function chatOnce<T>(
+  cfg: LLMConfig,
+  system: string,
+  user: string,
+  { temperature = 0.6, timeoutMs = 90000 }: { temperature?: number; timeoutMs?: number },
 ): Promise<T> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);

@@ -36,7 +36,7 @@ export function parseBriefOffline(prompt: string, base: Partial<EventBrief> = {}
 
   const pn = p.replace(/(\d),(\d{3})/g, "$1$2");
   const guestsM =
-    pn.match(/(\d{1,5})\s*(?:\+\s*)?-?\s*(?:person|people|guests?|attendees|hackers|folks|ppl|friends|students|pax|kids|adults|of us)/) ||
+    pn.match(/(\d{1,5})\s*(?:\+\s*)?-?\s*(?:persons?|people|guests?|attendees?|hackers?|folks|ppl|friends|students?|pax|kids|adults|of us)/) ||
     pn.match(/\b(?:for|party of|table for)\s+(\d{1,5})\b(?!\s*(?:h\b|hours?|hrs?|days?|min|%|am|pm|k\b|:\d))/);
   const budgetM = p.match(/\$\s?(\d[\d,]*(?:\.\d+)?)\s*(k\b)?/) || p.match(/(\d[\d,]*)\s*(k\b)?\s*(?:dollars|usd|budget)/);
   let budget = base.budget || 0;
@@ -58,6 +58,7 @@ export function parseBriefOffline(prompt: string, base: Partial<EventBrief> = {}
     if (!md[3] && new Date(y, m, +md[2]) < now) y += 1;
     date = `${y}-${String(m + 1).padStart(2, "0")}-${String(+md[2]).padStart(2, "0")}`;
   } else if (!date && /\btomorrow\b/.test(p)) date = defaultDate(1);
+  else if (!date && /\byesterday\b/.test(p)) date = defaultDate(-1);
   else if (!date && /\btoday\b|\btonight\b/.test(p)) date = defaultDate(0);
   else if (!date && WEEKDAY.test(p)) {
     const w = p.match(WEEKDAY)!;
@@ -142,7 +143,7 @@ export function applyFeedbackOffline(brief: EventBrief, feedback: string): Event
   const pct = f.match(/(\d{1,2})\s*%/);
   if (/cheaper|cut|lower|less expensive|reduce/.test(f)) b.budget = Math.round(b.budget * (1 - (pct ? +pct[1] / 100 : 0.25)));
   if (/more budget|splurge|fancier|upscale|bigger budget/.test(f)) b.budget = Math.round(b.budget * 1.3);
-  const g = f.replace(/(\d),(\d{3})/g, "$1$2").match(/(\d{1,5})\s*(more\s+)?(?:people|guests|attendees|hackers)/);
+  const g = f.replace(/(\d),(\d{3})/g, "$1$2").match(/(\d{1,5})\s*(more\s+)?(?:people|guests?|attendees?|hackers?)/);
   if (g) b.guests = g[2] ? b.guests + +g[1] : +g[1];
   const $ = f.match(/\$\s?(\d[\d,]*)\s*(k\b)?/);
   if ($) b.budget = parseFloat($[1].replace(/,/g, "")) * ($[2] ? 1000 : 1);

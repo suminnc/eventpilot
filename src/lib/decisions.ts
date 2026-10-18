@@ -126,7 +126,7 @@ export function planContext(plan: EventPlan): string {
         (sl) =>
           `${sl.category} quotes (pick #${sl.pick + 1}, why: ${sl.why}): ${sl.quotes.map((q, i) => `${i + 1}. ${q.vendor} ${money(q.price)}${q.listPrice && q.listPrice > q.price ? ` (negotiated from ${money(q.listPrice)})` : ""} ★${q.rating} ${q.leadDays}d lead ${q.cancellable ? "free cancel" : "non-refundable"}${q.tags.length ? ` [${q.tags.join(", ")}]` : ""}${q.note ? ` – ${q.note}` : ""}`).join("; ")}`,
       ),
-      `Outbox: ${a.outbox.filter((m) => m.status === "draft").length} email/permit drafts awaiting approval in the app (not approvable by text), ${a.outbox.filter((m) => m.status === "sent").length} sent.`,
+      `Outbox: ${a.outbox.filter((m) => m.status === "draft").length} email/permit drafts awaiting approval (text SEND to send them all), ${a.outbox.filter((m) => m.status === "sent").length} sent.`,
     );
   }
   return L.filter(Boolean).join("\n");

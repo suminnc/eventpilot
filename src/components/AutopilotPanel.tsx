@@ -89,7 +89,7 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
         <>
           {pending.length > 0 && (
             <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-4">
-              <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-amber-100"><Lock size={14} /> {pending.length} purchase{pending.length > 1 ? "s" : ""} need your approval</h3>
+              <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-amber-100"><Lock size={14} /> {pending.length} {pending.length > 1 ? "purchases need" : "purchase needs"} your approval</h3>
               <div className="grid gap-2">
                 {pending.map((p) => (
                   <div key={p.id} className="flex flex-wrap items-center gap-3 rounded-lg bg-black/30 p-3 text-sm">

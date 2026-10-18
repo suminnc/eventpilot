@@ -11,7 +11,7 @@ export function mailConfig() {
     host: process.env.SMTP_HOST || "smtp.gmail.com",
     port: Number(process.env.SMTP_PORT || 465),
     user,
-    pass,
+    pass: pass.replace(/\s+/g, ""),
     from: process.env.EMAIL_FROM || user,
     redirect,
   };

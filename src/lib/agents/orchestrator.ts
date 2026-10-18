@@ -241,10 +241,13 @@ async function logistics(ctx: Ctx, brief: EventBrief, budget: BudgetLine[], venu
     const food = budget.find((b) => /food|catering/i.test(b.category))?.amount ?? brief.budget * 0.35;
     const vendors: Vendor[] = [
       { category: "Catering", suggestion: brief.guests > 150 ? "Full-service caterer with buffet stations" : "Local restaurant family-style catering", estCost: Math.round(food), contactTip: `Ask for a per-head quote for ${brief.guests}${brief.constraints.length ? ` incl. ${brief.constraints.join(", ")}` : ""}.` },
-      { category: "AV", suggestion: brief.eventType === "hackathon" ? "Venue AV + rented mesh Wi-Fi & power strips" : "PA system, wireless mic, projector", estCost: Math.round(brief.budget * 0.06), contactTip: "Confirm bandwidth / power drops per table." },
-      { category: "Photography", suggestion: "Freelance event photographer (2–3h coverage)", estCost: Math.min(1200, Math.round(brief.budget * 0.05)), contactTip: "Share the run-of-show so they catch key moments." },
+      { category: "AV", suggestion: brief.eventType === "hackathon" ? "Venue AV + rented mesh Wi-Fi & power strips" : "PA system, wireless mic, projector", estCost: Math.round(budget.find((b) => /\bav\b|wi-?fi|equipment/i.test(b.category))?.amount ?? brief.budget * 0.06), contactTip: brief.eventType === "hackathon" || brief.guests >= 300 ? `Written spec: ≥1 Gbps dedicated symmetric uplink, ~${Math.ceil(brief.guests / 50)} access points (1 per 50 attendees), live usage graphs during the event, and SLA remedies if service drops. Plus power drops per table.` : "Confirm bandwidth / power drops per table." },
+      { category: "Photography", suggestion: "Freelance event photographer (2–3h coverage)", estCost: Math.round(budget.find((b) => /photo/i.test(b.category))?.amount ?? Math.min(1200, brief.budget * 0.05)), contactTip: "Share the run-of-show so they catch key moments." },
     ];
-    if (venue && !venue.indoor) vendors.push({ category: "Rentals", suggestion: "Tent/canopy + heaters on standby", estCost: Math.round(brief.budget * 0.04), contactTip: "Book with a free-cancellation window 72h out." });
+    const line = (re: RegExp) => budget.find((b) => re.test(b.category))?.amount ?? 0;
+    if (line(/swag|merch/i)) vendors.push({ category: "Swag", suggestion: `Shirts, stickers and totes for ${brief.guests.toLocaleString()}`, estCost: Math.round(line(/swag|merch/i)), contactTip: "Send print-ready art 2 weeks before order-by; approve a proof before paying the balance." });
+    if (line(/prize/i)) vendors.push({ category: "Prizes", suggestion: "Hardware and gift-card prizes", estCost: Math.round(line(/prize/i)), contactTip: "Finance collects W-9/W-8BEN from winners before payout; cash prizes over $600 need a 1099." });
+    if (venue && !venue.indoor) vendors.push({ category: "Rentals", suggestion: "Tent/canopy + heaters on standby", estCost: Math.round(budget.find((b) => /tent|rental/i.test(b.category))?.amount ?? brief.budget * 0.04), contactTip: "Book with a free-cancellation window 72h out." });
     const days = Math.round((new Date(brief.date).getTime() - Date.now()) / 86_400_000);
     const due = (before: number) => {
       const d = new Date(brief.date);

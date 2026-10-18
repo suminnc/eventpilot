@@ -4,9 +4,9 @@ import type { BudgetLine, EventBrief, Venue } from "./types";
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 
 const SPLITS: Record<string, [string, number][]> = {
-  hackathon: [["Food & drinks", 0.38], ["Prizes", 0.18], ["Swag", 0.1], ["AV & Wi-Fi", 0.08], ["Staffing & security", 0.06], ["Marketing", 0.04]],
-  wedding: [["Catering & bar", 0.4], ["Photo & video", 0.12], ["Music / DJ", 0.08], ["Florals & decor", 0.1], ["Attire & beauty", 0.06]],
-  default: [["Food & drinks", 0.4], ["Decor & ambiance", 0.1], ["Entertainment", 0.12], ["AV & equipment", 0.06], ["Supplies & misc", 0.06]],
+  hackathon: [["Food & drinks", 0.38], ["Prizes", 0.18], ["Swag", 0.1], ["AV & Wi-Fi", 0.08], ["Staffing & security", 0.06], ["Marketing", 0.04], ["Photo & video", 0.01], ["Permits & insurance", 0.015]],
+  wedding: [["Catering & bar", 0.4], ["Photo & video", 0.12], ["Music / DJ", 0.08], ["Florals & decor", 0.1], ["Attire & beauty", 0.06], ["AV & sound", 0.05], ["Tent & rentals", 0.04], ["Permits & insurance", 0.01]],
+  default: [["Food & drinks", 0.4], ["Decor & ambiance", 0.1], ["Entertainment", 0.12], ["AV & equipment", 0.06], ["Supplies & misc", 0.06], ["Photo & video", 0.02], ["Permits & insurance", 0.01]],
 };
 
 export function allocateBudget(brief: EventBrief, venue: Venue | undefined): BudgetLine[] {

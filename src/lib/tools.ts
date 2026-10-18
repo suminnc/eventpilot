@@ -54,11 +54,11 @@ function describe(hi: number, p: number) {
   return `${temp}, ${sky}`;
 }
 
-async function fetchJSON<T>(url: string): Promise<T> {
+async function fetchJSON<T>(url: string, headers?: Record<string, string>): Promise<T> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 6000);
   try {
-    const r = await fetch(url, { signal: ctrl.signal, cache: "no-store" });
+    const r = await fetch(url, { signal: ctrl.signal, cache: "no-store", headers });
     if (!r.ok) throw new Error(String(r.status));
     return (await r.json()) as T;
   } finally {
@@ -91,44 +91,148 @@ const CATALOG: (Omit<Venue, "why"> & { tags: string[]; city: string })[] = [
   { name: "Dolores Park North Lawn", neighborhood: "Mission, San Francisco", capacity: 400, pricePerHour: 80, style: "City park", indoor: false, tags: ["picnic", "birthday", "casual", "social", "family"], city: "bay area" },
 ];
 
-const GENERIC: (Omit<Venue, "why" | "neighborhood"> & { tags: string[] })[] = [
-  { name: "Downtown Event Loft", capacity: 250, pricePerHour: 450, style: "Industrial loft", indoor: true, tags: ["launch", "meetup", "hackathon", "party", "corporate"] },
-  { name: "University Conference Center", capacity: 600, pricePerHour: 500, style: "Conference hall", indoor: true, tags: ["hackathon", "conference", "student", "workshop"] },
-  { name: "Botanical Garden Pavilion", capacity: 180, pricePerHour: 520, style: "Garden pavilion", indoor: false, tags: ["wedding", "gala", "dinner", "formal"] },
-  { name: "Public park picnic area", capacity: 200, pricePerHour: 0, style: "Open lawn, first come or reserved via park permit", indoor: false, tags: ["picnic", "family", "casual", "outdoor", "park"] },
-  { name: "Community Park Pavilion", capacity: 150, pricePerHour: 50, style: "Covered park pavilion", indoor: false, tags: ["picnic", "birthday", "family", "casual"] },
-  { name: "Boutique Hotel Rooftop", capacity: 120, pricePerHour: 650, style: "Rooftop terrace", indoor: false, tags: ["party", "networking", "social", "launch"] },
-  { name: "Restaurant table reservation", capacity: 16, pricePerHour: 0, style: "Restaurant, no room fee", indoor: true, tags: ["dinner", "intimate", "birthday", "team", "casual"] },
-  { name: "Convention Center Hall", capacity: 8000, pricePerHour: 2500, style: "Exhibit hall, rented by the day", indoor: true, tags: ["conference", "expo", "convention", "trade show"] },
-  { name: "Fairgrounds / Stadium Lot", capacity: 60000, pricePerHour: 4000, style: "Open grounds with staging and power", indoor: false, tags: ["festival", "concert", "fair", "large", "music"] },
-  { name: "Private Dining Room", capacity: 40, pricePerHour: 220, style: "Restaurant private room", indoor: true, tags: ["dinner", "intimate", "birthday", "team"] },
-];
+type Cand = Omit<Venue, "why"> & { tags?: string[]; source: "ai" | "map" | "catalog" };
+type Geo = { lat: number; lon: number; name: string };
+const UA = { "User-Agent": "EventPilot/1.0 (https://eventpilot-sigma.vercel.app)" };
 
-export function venueSearchTool(city: string, eventType: string, vibe: string, guests: number, maxHourly: number, prompt = "") {
-  const asked = prompt.toLowerCase();
+/** Rough rental size/price by map category; AI-proposed venues carry their own estimates. */
+const KIND: Record<string, { capacity: number; pricePerHour: number; style: string; indoor: boolean; tags: string[] }> = {
+  conference_centre: { capacity: 1000, pricePerHour: 1500, style: "Conference center", indoor: true, tags: ["hackathon", "conference", "expo", "summit", "convention"] },
+  community_centre: { capacity: 200, pricePerHour: 150, style: "Community center hall", indoor: true, tags: ["meetup", "workshop", "community", "meeting"] },
+  hotel: { capacity: 250, pricePerHour: 900, style: "Hotel event space", indoor: true, tags: ["wedding", "gala", "formal", "banquet"] },
+  park: { capacity: 300, pricePerHour: 60, style: "City park (permit)", indoor: false, tags: ["picnic", "outdoor", "park", "family", "festival"] },
+  restaurant: { capacity: 50, pricePerHour: 250, style: "Restaurant private dining", indoor: true, tags: ["dinner", "intimate", "team", "rehearsal"] },
+  bar: { capacity: 150, pricePerHour: 350, style: "Bar buyout", indoor: true, tags: ["mixer", "networking", "party", "launch", "happy hour", "social"] },
+};
+
+function km(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
+  const r = Math.PI / 180, x = (b.lon - a.lon) * r * Math.cos(((a.lat + b.lat) / 2) * r), y = (b.lat - a.lat) * r;
+  return Math.sqrt(x * x + y * y) * 6371;
+}
+const norm = (s: string) => s.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w && !/^(the|at|of|a|and|sf|la)$/.test(w));
+function sameName(a: string, b: string) {
+  const [x, y] = [norm(a), norm(b)].sort((p, q) => p.length - q.length);
+  const big = new Set(y);
+  return x.length > 0 && x.filter((w) => big.has(w)).length / x.length >= 0.75;
+}
+
+const ALIAS: Record<string, string> = { la: "Los Angeles", sf: "San Francisco", nyc: "New York", dtla: "Los Angeles", "bay area": "San Francisco" };
+
+/** Geocodes the event city. Ambiguous names (Pasadena TX vs CA) prefer the state/country given, then California (home market), then the US. */
+async function geocode(city: string): Promise<Geo | null> {
+  const [head, ...rest] = city.split(",").map((x) => x.trim());
+  const name = ALIAS[head.toLowerCase()] ?? head;
+  const hint = rest.join(" ").toLowerCase();
+  const g = await fetchJSON<{ results?: { latitude: number; longitude: number; name: string; admin1?: string; country_code?: string; population?: number }[] }>(
+    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=10`,
+  ).catch(() => null);
+  const score = (r: { admin1?: string; country_code?: string; population?: number }) =>
+    (hint && r.admin1 && (hint.includes(r.admin1.toLowerCase()) || (hint === "ca" && r.admin1 === "California") || hint === r.admin1.slice(0, 2).toLowerCase()) ? 1e9 : 0) +
+    (r.admin1 === "California" ? 1e8 : 0) + (r.country_code === "US" ? 1e7 : 0) + Math.min(r.population ?? 0, 9e6);
+  const r = [...(g?.results ?? [])].sort((x, y) => score(y) - score(x))[0];
+  return r ? { lat: r.latitude, lon: r.longitude, name: r.admin1 ? `${r.name}, ${r.admin1}` : r.name } : null;
+}
+
+type PhotonHit = { geometry: { coordinates: [number, number] }; properties: { name?: string; osm_type: string; osm_id: number; osm_value: string; street?: string; housenumber?: string; district?: string; city?: string } };
+const osmUrl = (t: string, id: number) => `https://www.openstreetmap.org/${{ N: "node", W: "way", R: "relation" }[t] ?? "node"}/${id}`;
+const addr = (p: PhotonHit["properties"]) => [p.housenumber && p.street ? `${p.housenumber} ${p.street}` : p.street, p.district ?? p.city].filter(Boolean).join(", ");
+
+/** Checks a venue name against OpenStreetMap near the city; returns its real address + map link, or null if it can't be found. */
+async function verifyPlace(name: string, geo: Geo) {
+  const j = await fetchJSON<{ features: PhotonHit[] }>(
+    `https://photon.komoot.io/api/?q=${encodeURIComponent(name)}&lat=${geo.lat}&lon=${geo.lon}&limit=8`, UA,
+  ).catch(() => null);
+  const hit = j?.features.find((f) => f.properties.name && sameName(name, f.properties.name) && km(geo, { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] }) < 60);
+  return hit ? { address: addr(hit.properties), url: osmUrl(hit.properties.osm_type, hit.properties.osm_id) } : null;
+}
+
+type NomHit = { name: string; type: string; lat: string; lon: string; osm_type: string; osm_id: number; address?: Record<string, string>; extratags?: Record<string, string> };
+/** Lists real places of one kind around the city from OpenStreetMap (Nominatim), e.g. "community centre in Pasadena". */
+async function mapListing(kind: string, label: string, city: string, geo: Geo): Promise<Cand[]> {
+  const j = await fetchJSON<NomHit[]>(
+    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(`${label} in ${city.split(",")[0].trim()}`)}&format=jsonv2&limit=10&extratags=1&addressdetails=1`, UA,
+  ).catch(() => [] as NomHit[]);
+  const k = KIND[kind];
+  return j
+    .filter((h) => h.name && km(geo, { lat: +h.lat, lon: +h.lon }) < 30)
+    .map((h) => ({
+      name: h.name,
+      neighborhood: [h.address?.house_number && h.address?.road ? `${h.address.house_number} ${h.address.road}` : h.address?.road, h.address?.neighbourhood ?? h.address?.suburb ?? h.address?.city].filter(Boolean).join(", "),
+      capacity: Number(h.extratags?.capacity) || k.capacity,
+      pricePerHour: k.pricePerHour,
+      style: k.style,
+      indoor: k.indoor,
+      url: h.extratags?.website ?? `https://www.openstreetmap.org/${h.osm_type}/${h.osm_id}`,
+      tags: k.tags,
+      source: "map" as const,
+    }));
+}
+
+function kindsFor(words: string, guests: number): [string, string][] {
+  const k: [string, string][] = [];
+  if (/hackathon|conference|expo|summit|convention/.test(words) || guests >= 400) k.push(["conference_centre", "conference centre"]);
+  if (/picnic|park|outdoor|family|festival/.test(words)) k.push(["park", "park"]);
+  if (/dinner|intimate|team|shower|rehearsal/.test(words)) k.push(["restaurant", "restaurant"]);
+  if (/mixer|networking|party|launch|social|happy hour|birthday/.test(words)) k.push(["bar", "bar"]);
+  if (/wedding|gala|formal|banquet/.test(words) || guests >= 150) k.push(["hotel", "hotel"]);
+  k.push(["community_centre", "community centre"]);
+  return k.slice(0, 2);
+}
+
+export type VenueSearch = { venues: Venue[]; checked: number; dropped: string[]; source: string };
+
+/**
+ * Live venue search, run fresh for every plan: the AI proposes real venues it knows in the city, each one is checked
+ * against OpenStreetMap (unverifiable names are dropped), and real places from a map listing fill in. Prices are
+ * typical rental estimates to confirm with the venue.
+ */
+export async function venueSearchTool(
+  city: string, eventType: string, vibe: string, guests: number, maxHourly: number, prompt = "",
+  propose?: () => Promise<Omit<Venue, "why" | "url">[]>,
+): Promise<VenueSearch> {
+  const words = `${eventType} ${vibe} ${prompt}`.toLowerCase();
+  const geo = await geocode(city);
+  const dropped: string[] = [];
+  let pool: Cand[] = [];
+  let checked = 0;
+  if (geo) {
+    const [ai, ...maps] = await Promise.all([
+      propose ? propose().catch(() => [] as Omit<Venue, "why" | "url">[]) : Promise.resolve([] as Omit<Venue, "why" | "url">[]),
+      ...kindsFor(words, guests).map(([k, l], i) => new Promise<Cand[]>((r) => setTimeout(r, i * 1100)).then(() => mapListing(k, l, city, geo))),
+    ]);
+    checked = ai.length;
+    const verified = await Promise.all(ai.slice(0, 10).map(async (v) => ({ v, real: await verifyPlace(v.name, geo) })));
+    for (const { v, real } of verified) {
+      if (real) pool.push({ ...v, neighborhood: real.address || v.neighborhood, url: real.url, source: "ai" });
+      else dropped.push(v.name);
+    }
+    for (const m of maps.flat()) if (!pool.some((p) => sameName(p.name, m.name))) pool.push(m);
+  }
   const region = regionFor(city);
-  const words = `${eventType} ${vibe}${guests >= 1000 ? " large" : ""}`.toLowerCase();
-  const local = GENERIC.map((v) => ({ ...v, neighborhood: city.split(",")[0], city }));
-  const pool = region ? [...CATALOG.filter((v) => v.city === region), ...local] : local;
-  return pool
+  const fromCatalog = !pool.length && !!region;
+  if (fromCatalog) pool = CATALOG.filter((v) => v.city === region).map((v) => ({ ...v, source: "catalog" as const }));
+  const ranked = pool
     .map((v) => {
-      const tagScore = v.tags.filter((t) => new RegExp(`\\b${t}\\b`).test(words)).length * 3 + (v.tags.includes(eventType.toLowerCase()) ? 4 : 0);
       const fits = v.capacity >= guests ? Math.max(-6, 4 - 2 * Math.log2(v.capacity / Math.max(guests, 1))) : -10;
-      const wantsIndoor = /indoor/.test(words) && !v.indoor ? -12 : 0;
+      const wantsIndoor = /indoor/.test(words) && !v.indoor ? -12 : /picnic|outdoor|park\b|lawn/.test(words) ? (v.indoor ? -2 : 4) : 0;
       const price = v.pricePerHour <= maxHourly ? 2 : -3 - 2 * Math.log2(v.pricePerHour / Math.max(maxHourly, 1));
-      const cityName = city.split(",")[0].trim().toLowerCase();
-      const named = CATALOG.includes(v as (typeof CATALOG)[number]);
-      const near = named && cityName && `${v.name} ${v.neighborhood}`.toLowerCase().includes(cityName) ? 3 : 0;
-      const requested = asked && namePattern(v.name).test(asked) ? 30 : 0;
-      return { v, score: requested + wantsIndoor + tagScore + (tagScore ? 0 : -3) + fits + price + near + (named ? 2 : 0) };
+      const tagScore = (v.tags ?? []).filter((t) => new RegExp(`\\b${t}\\b`).test(words)).length * 3;
+      const requested = namePattern(v.name).test(prompt.toLowerCase()) ? 30 : 0;
+      return { v, score: requested + wantsIndoor + fits + price + tagScore + (v.source === "ai" ? 6 : 0) };
     })
     .sort((a, b) => b.score - a.score)
-    .slice(0, 3)
-    .map(({ v }) => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { tags, city: _c, ...rest } = v as typeof v & { city?: string };
-      return { ...rest, why: "" } as Venue;
-    });
+    .filter(({ v }, i, all) => all.slice(0, i).filter((x) => x.v.style === v.style).length < 2)
+    .slice(0, 5)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    .map(({ v: { tags, source, ...rest } }) => ({ ...rest, why: "" }) as Venue);
+  return {
+    venues: ranked,
+    checked,
+    dropped,
+    source: fromCatalog
+      ? "Live search found nothing; used curated real venues"
+      : geo ? `OpenStreetMap search around ${geo.name}${checked ? ` + ${checked} AI-suggested venues checked` : ""}` : "City not found",
+  };
 }
 
 /** Matches a venue named in free text by its first two distinctive words, e.g. "Palace of Fine Arts" or "Pier 27". */

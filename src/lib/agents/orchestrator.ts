@@ -110,12 +110,25 @@ async function scout(ctx: Ctx, brief: EventBrief): Promise<Venue[]> {
   return step(ctx, "venue", `Searching venues in ${brief.city} for ${brief.guests} guests…`, async () => {
     const maxHourly = (brief.budget * 0.35) / billableHours(brief.durationHours);
     think(ctx, "venue", `Venue should stay under ~35% of budget → ≤ ${money(maxHourly)}/hr.`);
-    const found = await tool(
+    const llm = ctx.llm;
+    const propose = llm
+      ? () =>
+          chatJSON<{ venues: Omit<Venue, "why" | "url">[] }>(
+            llm,
+            `You are the Venue Scout agent. List 8 real, currently operating venues in or near the event's city that could host this event. Use each venue's exact official name (no invented or generic names). If the brief names a venue, include it first. For each give a realistic capacity for this format and a typical rental price per hour in USD (estimate). Return {"venues":[{"name","neighborhood","capacity","pricePerHour","style","indoor"}]}.`,
+            `Brief: ${briefJSON(brief)}${fb(ctx)}\nOriginal request: ${brief.prompt}`,
+            { timeoutMs: 45_000 },
+          ).then((r) => (Array.isArray(r.venues) ? r.venues : []).filter((v) => v && typeof v.name === "string").map((v) => ({ ...v, capacity: Math.max(1, Number(v.capacity) || 0), pricePerHour: Math.max(0, Number(v.pricePerHour) || 0), indoor: v.indoor !== false, neighborhood: String(v.neighborhood ?? ""), style: String(v.style ?? "Venue") })))
+      : undefined;
+    const search = await tool(
       ctx, "venue", "venue_search",
-      JSON.stringify({ city: brief.city, type: brief.eventType, vibe: brief.vibe, guests: brief.guests, maxHourly: Math.round(maxHourly) }),
-      () => venueSearchTool(brief.city, brief.eventType, brief.vibe, brief.guests, maxHourly, brief.prompt),
-      (r) => r.map((v) => `${v.name} (${v.capacity} cap, ${money(v.pricePerHour)}/hr)`).join("; "),
+      JSON.stringify({ city: brief.city, type: brief.eventType, vibe: brief.vibe, guests: brief.guests, maxHourly: Math.round(maxHourly), live: true }),
+      () => venueSearchTool(brief.city, brief.eventType, brief.vibe, brief.guests, maxHourly, brief.prompt, propose),
+      (r) => `${r.source}: ${r.venues.map((v) => `${v.name} (${v.capacity} cap, ~${money(v.pricePerHour)}/hr)`).join("; ")}${r.dropped.length ? ` · dropped (not found on map): ${r.dropped.join(", ")}` : ""}`,
     );
+    const found = search.venues;
+    if (search.dropped.length) think(ctx, "venue", `Couldn't verify ${search.dropped.length} suggested venue${search.dropped.length === 1 ? "" : "s"} on OpenStreetMap, so I dropped ${search.dropped.length === 1 ? "it" : "them"}.`);
+    think(ctx, "venue", "Rental prices are typical estimates; the venue confirms the real quote during outreach.");
     return withLLM(ctx, "venue",
       () => found.map((v) => ({ ...v, why: offlineWhy(v, brief, maxHourly) })),
       async (llm) => {

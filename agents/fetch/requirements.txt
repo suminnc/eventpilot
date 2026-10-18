@@ -1,3 +1,0 @@
-uagents>=0.22
-uagents-core>=0.3
-requests>=2.31

@@ -26,7 +26,7 @@ Other features:
 - Pick an alternate venue, check off tasks, and copy the invite or SMS.
 - Export the plan to **.ics** (the event plus prep-task deadlines) or **Markdown**.
 - Plans are saved in localStorage.
-- `POST /api/agent` returns JSON for other agents to call. `agents/fetch/` holds a **Fetch.ai uAgent** that registers EventPilot on Agentverse so it can be found through ASI:One.
+- `POST /api/agent` returns JSON for other agents to call.
 
 ## Quick start
 
@@ -55,15 +55,8 @@ curl -X POST localhost:3000/api/agent -d '{"prompt":"..."}'                     
 
 The CREAO agent `6cb5afb7-e632-436d-b330-82772ec7a7ca` (agent.creao.ai) reviews every plan the Ops Team books. Set `CREAO_API_KEY` (capi_…, server only) and `CREAO_APP_ID`; EventPilot calls the API Trigger from the server, polls the async run (up to 10 min) and texts the verdict. Run share link: *(team: paste from the agent page)*. Agent instructions: [docs/creao-swarm-agent.md](docs/creao-swarm-agent.md).
 
-### Fetch.ai / ASI:One
-
-```bash
-cd agents/fetch && pip install -r requirements.txt
-EVENTPILOT_URL=https://<deploy>/api/agent AGENT_SEED="<secret>" python eventpilot_agent.py
-```
-
 ## Prize tracks
-Target tracks: Photon (messaging agent), CREAO (Best One-Person Company), Visa, Cognition/Devin, StepFun (every plan calls `step-5-preview`), Workday and Paper. The write-up for each is in [SUBMISSION.md](SUBMISSION.md). It also fits Applied Intelligence, the Fetch.ai ASI:One challenge, and StepFun.
+Target tracks: Photon (messaging agent), CREAO (Best One-Person Company), Visa, Cognition/Devin, StepFun (every plan calls `step-5-preview`), Workday and Paper. The write-up for each is in [SUBMISSION.md](SUBMISSION.md). It also fits Applied Intelligence.
 
 ## Stack
 Next.js 15 (App Router) · React 19 · Tailwind v4 · TypeScript · lucide-react. Venue rates are planning estimates, not quotes.

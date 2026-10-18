@@ -1,5 +1,7 @@
 # 2½-minute demo script
 
+Live app: https://eventpilot-sigma.vercel.app/
+
 Use StepFun for live reasoning (2–3 min per plan; start it before recording) or leave `LLM_API_KEY` empty for the instant offline planner. Have the organizer's phone on screen (mirroring) for the texts.
 
 | Time | Show | Say |

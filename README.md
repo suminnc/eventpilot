@@ -1,5 +1,7 @@
 # EventPilot: your AI event planning crew
 
+**Live app: https://eventpilot-sigma.vercel.app/**
+
 Built for **LA Hacks: AI Hackathon 2026** ([tracks](https://live.lahacks.com/tracks)). The flagship demo plans **Cal Hacks 13.0**.
 
 You describe an event in plain English. A **Coordinator** agent turns that into a structured brief and hands the work to seven specialist agents. You can watch each agent's reasoning and tool calls stream live:
@@ -7,7 +9,7 @@ You describe an event in plain English. A **Coordinator** agent turns that into 
 | Agent | Job | Tools |
 |---|---|---|
 | Coordinator | Turns the request into a brief, routes the work, applies refinements | intent parser / LLM |
-| Venue Scout | Finds and ranks venues by capacity, cost, and vibe | `venue_search` (curated LA + Bay Area catalog) |
+| Venue Scout | Finds and ranks venues by capacity, cost, and vibe | `venue_search` (fresh live search each plan: AI-suggested real venues verified on OpenStreetMap + map listings) |
 | Budget Analyst | Splits the budget into line items and keeps a contingency | `budget_calculator` |
 | Scheduler | Builds a run-of-show that can span several days | template + LLM |
 | Logistics | Picks vendors, builds a timeline of tasks, checks weather, sizes ops (staff, food, Wi-Fi, power, sponsors) | `weather_forecast` (live [Open-Meteo](https://open-meteo.com), no key), `ops_calculator` |

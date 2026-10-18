@@ -1,5 +1,8 @@
 # EventPilot: LA Hacks AI Hackathon 2026 submission notes
 
+**Live app:** https://eventpilot-sigma.vercel.app/  
+**Code:** https://github.com/suminnc/eventpilot
+
 **One line:** describe an event in one prompt. A crew of AI agents plans it, then **runs it**: they compare vendors, file permits, book vendors, and pay deposits under a spend mandate you control, writing every step to a tamper-evident audit log. Flagship demo: **Cal Hacks 13.0**, 2,000 hackers, 36 hours, San Francisco.
 
 ## How it works

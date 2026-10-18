@@ -13,7 +13,7 @@ export function help(plan: EventPlan): string {
   const n = first ? refNum(first) : null;
   const sl = a?.shortlists?.[0];
   const pick = sl ? `PICK ${sl.category.toUpperCase()} ${((sl.pick + 1) % sl.quotes.length) + 1}, ` : "";
-  return `Reply ${n ? `YES ${n}, NO ${n}, ALL YES, ` : ""}${pick}or STATUS.`;
+  return n || pick ? `Reply ${n ? `YES ${n}, NO ${n}, ALL YES, ` : ""}${pick}or STATUS.` : "Text STATUS anytime.";
 }
 
 export function untexted(plan: EventPlan): Purchase[] {
@@ -43,11 +43,12 @@ export function statusText(plan: EventPlan): string {
 
 const YES = "yes|y|approve|approved|ok|okay|confirm";
 const NO = "no|n|reject|decline|deny";
+const STATUS = /^(\?|status|help|menu|commands|options|list|pending|next|whats next|what next|now what|what now|whats left|what can you do|what do you do|what needs me|whats pending|whats up|hi|hello|hey|start)$/;
 
-export function applyReply(plan: EventPlan, text: string, via: string): { plan: EventPlan; reply: string } {
+export function applyReply(plan: EventPlan, text: string, via: string): { plan: EventPlan; reply: string; unknown?: boolean } {
   const a = plan.autopilot;
   if (!a) return { plan, reply: "Autopilot hasn't run yet, so there's nothing to decide." };
-  const t = text.trim().toLowerCase().replace(/[.!]+$/, "").replace(/\s+/g, " ");
+  const t = text.trim().toLowerCase().replace(/[’']/g, "").replace(/\s+/g, " ").replace(/(.)[.!?]+$/, "$1");
   const pending = a.purchases.filter((p) => p.status === "pending");
   let next: EventPlan = { ...plan, autopilot: { ...a, audit: appendAudit(a.audit, "organizer", "text_reply", `${via}: "${text.trim().slice(0, 80)}"`) } };
   const find = (id: string) => next.autopilot!.purchases.find((p) => p.id === id)!;
@@ -93,6 +94,40 @@ export function applyReply(plan: EventPlan, text: string, via: string): { plan: 
       p.status === "pending" ? `Deposit ${ref(p)} ${money(p.amount)} needs your OK: reply YES ${refNum(p)}.` : p.status === "auto_approved" ? `Deposit ${money(p.amount)} paid on ${p.card}.` : `Deposit blocked: ${p.reason}.`;
     return { plan: next, reply: `Switched ${sl.category} to ${q.vendor} (${money(q.price)}); the old deposit was released. ${dep}` };
   }
-  if (/^(status|help|\?|hi|hello|hey|start)$/.test(t)) return { plan, reply: statusText(plan) };
-  return { plan, reply: `Sorry, I didn't catch that. ${help(plan)}` };
+  if (STATUS.test(t)) return { plan, reply: statusText(plan) };
+  return { plan, reply: `Sorry, I didn't catch that. ${help(plan)}`, unknown: true };
+}
+
+/** Compact, factual snapshot of the plan for answering free-form organizer questions. */
+export function planContext(plan: EventPlan): string {
+  const b = plan.brief;
+  const a = plan.autopilot;
+  const v = plan.venues[0];
+  const o = plan.ops;
+  const L = [
+    `Event: ${b.title} · ${b.eventType} · ${b.city} · ${b.date} ${b.startTime} · ${b.durationHours}h · ${b.guests} guests · budget ${money(b.budget)} · vibe ${b.vibe}`,
+    b.constraints.length ? `Constraints: ${b.constraints.join(", ")}` : "",
+    v ? `Venue: ${v.name} (${v.neighborhood}, cap ${v.capacity}, ${money(v.pricePerHour)}/hr, ${v.indoor ? "indoor" : "outdoor"}). Why: ${v.why}` : "",
+    plan.venues.length > 1 ? `Alternate venues: ${plan.venues.slice(1).map((x) => `${x.name} (cap ${x.capacity}, ${money(x.pricePerHour)}/hr)`).join("; ")}` : "",
+    plan.weather ? `Weather: ${plan.weather.summary}` : "",
+    `Budget: ${plan.budget.map((l) => `${l.category} ${money(l.amount)}`).join(", ")}`,
+    `Schedule: ${plan.schedule.slice(0, 16).map((x) => `${x.day ? `D${x.day} ` : ""}${x.time} ${x.title}`).join("; ")}`,
+    `Tasks: ${plan.tasks.filter((t) => t.done).length}/${plan.tasks.length} done. Next open: ${plan.tasks.filter((t) => !t.done).slice(0, 5).map((t) => `${t.title} (due ${t.due})`).join("; ") || "none"}`,
+    plan.permits?.length ? `Permits: ${plan.permits.map((x) => `${x.name} – ${x.agency}, ${money(x.fee)}, file by ${x.deadline}${x.atRisk ? ", AT RISK" : ""}`).join("; ")}` : "",
+    `Risks: ${plan.risks.map((r) => `[${r.level}] ${r.issue} → ${r.mitigation}`).join("; ")}. Plan confidence ${plan.score}/100.`,
+    o ? `Staffing: ${o.staffing.map((x) => `${x.count} ${x.role}`).join(", ")}. Check-in: ${o.checkin.lanes} lanes, ~${o.checkin.minutes} min. Sponsor target ${money(o.sponsorTarget)}.` : "",
+    o?.meals.length ? `Meals: ${o.meals.map((m) => `D${m.day} ${m.time} ${m.slot} ${m.servings} servings`).join("; ")}` : "",
+  ];
+  if (a) {
+    L.push(
+      `Spend mandate: total cap ${money(a.mandate.totalCap)}, per purchase ${money(a.mandate.perPurchaseCap)}, organizer approves above ${money(a.mandate.approvalThreshold)}, allowed ${a.mandate.allowedCategories.join(", ")}. Committed ${money(committed(a.purchases))}.`,
+      `Purchases: ${a.purchases.map((p) => `${ref(p)} ${p.purpose} · ${p.vendor} · ${money(p.amount)} · ${p.status}${p.card ? ` · ${p.card}` : ""} (${p.reason})`).join("; ")}`,
+      ...(a.shortlists ?? []).map(
+        (sl) =>
+          `${sl.category} quotes (pick #${sl.pick + 1}, why: ${sl.why}): ${sl.quotes.map((q, i) => `${i + 1}. ${q.vendor} ${money(q.price)} ★${q.rating} ${q.leadDays}d lead ${q.cancellable ? "free cancel" : "non-refundable"}${q.tags.length ? ` [${q.tags.join(", ")}]` : ""}${q.note ? ` – ${q.note}` : ""}`).join("; ")}`,
+      ),
+      `Outbox: ${a.outbox.filter((m) => m.status === "draft").length} email/permit drafts awaiting approval in the app (not approvable by text), ${a.outbox.filter((m) => m.status === "sent").length} sent.`,
+    );
+  }
+  return L.filter(Boolean).join("\n");
 }

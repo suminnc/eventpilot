@@ -2,7 +2,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MessageCircle, Send } from "lucide-react";
 import type { EventPlan, TextMessage } from "@/lib/types";
-import { applyReply, decisionText, refNum, untexted } from "@/lib/decisions";
+import { applyReply, decisionText, planContext, refNum, untexted } from "@/lib/decisions";
+import { appendAudit } from "@/lib/autopilot";
 
 type Live = { configured: boolean; platform?: string; agent?: string; organizer?: string; linked?: boolean; error?: string };
 type Via = TextMessage["via"];
@@ -13,19 +14,37 @@ function add(p: EventPlan, m: Omit<TextMessage, "id" | "ts"> & { id?: string }):
   return { ...p, autopilot: { ...a, texts: [...texts, { ...m, id: m.id ?? `${m.dir === "out" ? "o" : "i"}${texts.length}`, ts: Date.now() }] } };
 }
 
-function receive(p: EventPlan, text: string, via: Via, id?: string): EventPlan {
+function audit(p: EventPlan, actor: string, action: string, detail: string): EventPlan {
+  return { ...p, autopilot: { ...p.autopilot!, audit: appendAudit(p.autopilot!.audit, actor, action, detail) } };
+}
+
+/** Applies a command reply; anything that isn't a command comes back as a question for the agent to answer. */
+function receive(p: EventPlan, text: string, via: Via, id?: string): { plan: EventPlan; question?: string; fallback?: string } {
   const withIn = add(p, { id, dir: "in", body: text, via });
   const r = applyReply(withIn, text, via === "photon" ? "iMessage" : "simulated");
+  if (r.unknown) return { plan: audit(withIn, "organizer", "text_question", `${via === "photon" ? "iMessage" : "simulated"}: "${text.slice(0, 80)}"`), question: text, fallback: r.reply };
   const ap = r.plan.autopilot!;
   const asked = ap.purchases.filter((x) => x.status === "pending" && r.reply.includes(`#${refNum(x)} `)).map((x) => x.id);
   const next = asked.length ? { ...r.plan, autopilot: { ...ap, texted: [...new Set([...(ap.texted ?? []), ...asked])] } } : r.plan;
-  return add(next, { dir: "out", body: r.reply, via, queued: via === "photon" || undefined });
+  return { plan: add(next, { dir: "out", body: r.reply, via, queued: via === "photon" || undefined }) };
+}
+
+async function ask(p: EventPlan, question: string): Promise<string | null> {
+  try {
+    const history = (p.autopilot?.texts ?? []).slice(-7, -1).map(({ dir, body }) => ({ dir, body }));
+    const r = await fetch("/api/ask", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ question, context: planContext(p), history }) });
+    const j = (await r.json()) as { reply?: string | null };
+    return r.ok && j.reply ? j.reply : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Autopilot texts the organizer when a decision needs them (Photon iMessage/SMS when configured, otherwise a simulated thread). */
 export function OrganizerTexts({ plan, onChange, running }: { plan: EventPlan; onChange: (p: EventPlan) => void; running: boolean }) {
   const [live, setLive] = useState<Live | null>(null);
   const [draft, setDraft] = useState("");
+  const [thinking, setThinking] = useState(false);
   const planRef = useRef(plan);
   const changeRef = useRef(onChange);
   const runningRef = useRef(running);
@@ -45,6 +64,18 @@ export function OrganizerTexts({ plan, onChange, running }: { plan: EventPlan; o
     changeRef.current(p);
   }, []);
 
+  const answer = useCallback(
+    async (question: string, fallback: string, via: Via) => {
+      setThinking(true);
+      const reply = await ask(planRef.current, question);
+      setThinking(false);
+      const cur = planRef.current;
+      const logged = audit(cur, "agent", "text_answer", reply ? `answered: "${reply.slice(0, 80)}"` : "no model; sent command help");
+      commit(add(logged, { dir: "out", body: reply ?? fallback, via, queued: via === "photon" || undefined }));
+    },
+    [commit],
+  );
+
   const flush = useCallback(async () => {
     if (flushing.current) return;
     flushing.current = true;
@@ -53,7 +84,7 @@ export function OrganizerTexts({ plan, onChange, running }: { plan: EventPlan; o
         const p = planRef.current;
         const q = p.autopilot?.texts?.find((t) => t.queued);
         if (!q) break;
-        const r = await fetch("/api/photon", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: q.body, key: `ep-${p.id.slice(0, 8)}-${q.id}` }) });
+        const r = await fetch("/api/photon", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: q.body, key: `ep-${p.id.slice(0, 8)}-${q.id}-${q.ts}` }) });
         if (!r.ok) {
           const j = (await r.json().catch(() => ({}))) as { error?: string };
           setLive((l) => l && (r.status === 409 ? { ...l, linked: false, error: undefined } : { ...l, error: j.error ?? `HTTP ${r.status}` }));
@@ -101,8 +132,12 @@ export function OrganizerTexts({ plan, onChange, running }: { plan: EventPlan; o
         const seen = new Set((p.autopilot?.texts ?? []).map((t) => t.id));
         const fresh = (j.messages ?? []).filter((m) => !seen.has(m.id));
         if (!p.autopilot || !start) return;
-        for (const m of fresh) p = receive(p, m.text, "photon", m.id);
-        if (fresh.length) commit(p);
+        for (const m of fresh) {
+          const r = receive(p, m.text, "photon", m.id);
+          commit(r.plan);
+          if (r.question) await answer(r.question, r.fallback!, "photon");
+          p = planRef.current;
+        }
         if (fresh.length || j.linked) await flush();
       } catch {
         setLive((l) => l && { ...l, error: "Couldn't reach the server" });
@@ -113,19 +148,21 @@ export function OrganizerTexts({ plan, onChange, running }: { plan: EventPlan; o
     const id = setInterval(tick, 4000);
     void tick();
     return () => clearInterval(id);
-  }, [live?.configured, commit, flush]);
+  }, [live?.configured, commit, flush, answer]);
 
   useEffect(() => {
     end.current?.parentElement?.scrollTo({ top: end.current.parentElement.scrollHeight });
-  }, [texts.length]);
+  }, [texts.length, thinking]);
 
-  const reply = (text: string) => {
-    if (!text.trim() || running) return;
-    commit(receive(planRef.current, text.trim(), "simulated"));
+  const reply = async (text: string) => {
+    if (!text.trim() || running || thinking) return;
     setDraft("");
+    const r = receive(planRef.current, text.trim(), "simulated");
+    commit(r.plan);
+    if (r.question) await answer(r.question, r.fallback!, "simulated");
   };
   const pending = plan.autopilot?.purchases.filter((p) => p.status === "pending") ?? [];
-  const chips = [...pending.slice(0, 2).map((p) => `YES ${refNum(p)}`), ...(pending.length > 1 ? ["ALL YES"] : []), "STATUS"];
+  const chips = [...pending.slice(0, 2).map((p) => `YES ${refNum(p)}`), ...(pending.length > 1 ? ["ALL YES"] : []), "STATUS", "What's the biggest risk?"];
 
   return (
     <section className="rounded-xl border border-white/10 bg-black/20 p-4">
@@ -154,20 +191,21 @@ export function OrganizerTexts({ plan, onChange, running }: { plan: EventPlan; o
             {t.queued && <div className="mt-1 text-[10px] text-white/40">Waiting to send…</div>}
           </div>
         ))}
+        {thinking && <div className="self-start rounded-2xl rounded-bl-sm bg-white/[0.07] px-3 py-2 text-xs text-white/50">EventPilot is typing…</div>}
         <div ref={end} />
       </div>
       {live && !live.configured && (
         <>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {chips.map((c) => (
-              <button key={c} disabled={running} onClick={() => reply(c)} className="rounded-full border border-white/10 px-2.5 py-1 font-mono text-[11px] text-white/70 hover:border-accent/50 hover:text-white disabled:opacity-40">
+              <button key={c} disabled={running || thinking} onClick={() => void reply(c)} className="rounded-full border border-white/10 px-2.5 py-1 font-mono text-[11px] text-white/70 hover:border-accent/50 hover:text-white disabled:opacity-40">
                 {c}
               </button>
             ))}
           </div>
-          <form className="mt-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); reply(draft); }}>
-            <input className="input min-w-0 flex-1 text-sm" placeholder="Reply as the organizer, e.g. PICK CATERING 2" value={draft} onChange={(e) => setDraft(e.target.value)} disabled={running} aria-label="Reply as the organizer" />
-            <button className="btn-primary px-3" disabled={running || !draft.trim()} aria-label="Send reply"><Send size={14} /></button>
+          <form className="mt-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); void reply(draft); }}>
+            <input className="input min-w-0 flex-1 text-sm" placeholder="Reply or ask anything, e.g. PICK CATERING 2" value={draft} onChange={(e) => setDraft(e.target.value)} disabled={running} aria-label="Reply as the organizer" />
+            <button className="btn-primary px-3" disabled={running || thinking || !draft.trim()} aria-label="Send reply"><Send size={14} /></button>
           </form>
         </>
       )}

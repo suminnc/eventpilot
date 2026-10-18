@@ -1,5 +1,6 @@
 import { photonConfig } from "@/lib/photon";
 import { pushPlan, snapshot, startPhotonAgent } from "@/lib/photonAgent";
+import { relay } from "@/lib/relay";
 import type { EventPlan } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -17,7 +18,7 @@ function live() {
 /** GET ?rev=<n> → messaging status, the conversation, and the active plan when it changed since rev. */
 export async function GET(req: Request) {
   const l = live();
-  if (!l) return Response.json({ live: { configured: false } });
+  if (!l) return (await relay(req, "/api/photon")) ?? Response.json({ live: { configured: false } });
   startPhotonAgent();
   const s = snapshot();
   const rev = Number(new URL(req.url).searchParams.get("rev"));
@@ -26,7 +27,7 @@ export async function GET(req: Request) {
 
 /** POST { plan, rev } → make this the active plan the Photon agent acts on. 409 + server plan if it changed in the meantime. */
 export async function POST(req: Request) {
-  if (!photonConfig()) return Response.json({ error: "Photon is not configured" }, { status: 400 });
+  if (!photonConfig()) return (await relay(req, "/api/photon")) ?? Response.json({ error: "Photon is not configured" }, { status: 400 });
   const { plan, rev } = (await req.json().catch(() => ({}))) as { plan?: EventPlan; rev?: unknown };
   if (!plan || typeof plan.id !== "string" || !plan.brief || typeof rev !== "number") return Response.json({ error: "plan and rev are required" }, { status: 400 });
   const ok = pushPlan(plan, rev);

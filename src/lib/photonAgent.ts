@@ -23,7 +23,7 @@ import { financeText, itemsOf, submitReimbursement, syncFinance } from "./financ
  */
 
 type State = { rev: number; plan: EventPlan | null; thread: TextMessage[]; since: number; seen: string[]; mailSeen?: string[] };
-type Agent = { state: State; timer?: ReturnType<typeof setInterval>; polling: boolean; working: string | null; error?: string; notify?: ReturnType<typeof setTimeout>; mailTimer?: ReturnType<typeof setInterval>; mailPolling?: boolean; mailError?: string; planning?: { title: string; prompt: string; events: AgentEvent[] } | null };
+type Agent = { state: State; timer?: ReturnType<typeof setInterval>; polling: boolean; working: string | null; error?: string; notify?: ReturnType<typeof setTimeout>; mailTimer?: ReturnType<typeof setInterval>; mailPolling?: boolean; mailError?: string; webNotes?: string[]; webTimer?: ReturnType<typeof setTimeout>; planning?: { title: string; prompt: string; events: AgentEvent[] } | null };
 
 const FILE = path.join(process.cwd(), ".data", "photon-agent.json");
 const g = globalThis as unknown as { __photonAgent?: Agent };
@@ -59,8 +59,57 @@ export function pushPlan(plan: EventPlan, baseRev: number): boolean {
   const prev = agent().state.plan;
   setPlan(plan);
   scheduleNotify();
-  if (autonomous() && !plan.autopilot && prev?.id !== plan.id) setTimeout(() => void autoRun(plan.id), 5000);
+  const runs = autonomous() && !plan.autopilot && prev?.id !== plan.id;
+  if (photonConfig()) {
+    if (prev?.id !== plan.id) announcePlan(plan, runs);
+    else if (prev) queueWebUpdate(plan.brief.title, webChanges(prev, plan));
+  }
+  if (runs) setTimeout(() => void autoRun(plan.id), 5000);
   return true;
+}
+
+function announcePlan(plan: EventPlan, runs: boolean) {
+  const b = plan.brief;
+  const fresh = Date.now() - (Date.parse(plan.createdAt) || 0) < 15 * 60_000;
+  const next = runs ? "The Ops Team starts running it now; I'll text you every update and each money decision." : plan.autopilot ? "Text STATUS for where it stands." : "Text RUN to start Autopilot.";
+  void say(`${fresh ? "New event created on the website" : "Now working on"}: ${b.title}. ${b.guests.toLocaleString()} guests, ${b.city}, ${b.date}, ${money(b.budget)} budget${plan.venues[plan.selectedVenue] ? `, venue ${plan.venues[plan.selectedVenue].name}` : ""}. ${next}${link(" Watch live: ")}`, `new-${plan.id}-${Date.now()}`);
+}
+
+/** What the organizer changed on the website since the server's copy, in plain words. */
+export function webChanges(prev: EventPlan, next: EventPlan): string[] {
+  const out: string[] = [];
+  const v = next.venues[next.selectedVenue];
+  if (prev.selectedVenue !== next.selectedVenue && v) out.push(`Venue switched to ${v.name}`);
+  const done = new Set(prev.tasks.filter((t) => t.done).map((t) => t.id));
+  for (const t of next.tasks) if (t.done && !done.has(t.id)) out.push(`Task done: ${t.title}`);
+  if (!prev.autopilot && next.autopilot) out.push("Autopilot started");
+  else {
+    const seen = new Set((prev.autopilot?.audit ?? []).map((e) => e.hash));
+    for (const e of next.autopilot?.audit ?? []) if (!seen.has(e.hash)) out.push(e.detail);
+  }
+  if (!prev.dayops && next.dayops) out.push("Day-of ops plan is ready");
+  else {
+    const key = (l: { at: string; action: string; detail: string }) => `${l.at}|${l.action}|${l.detail}`;
+    const seen = new Set((prev.dayops?.log ?? []).map(key));
+    for (const l of [...(next.dayops?.log ?? [])].reverse()) if (!seen.has(key(l))) out.push(`Day-of: ${l.detail}`);
+  }
+  const seen = new Set((prev.finance?.activity ?? []).map((x) => x.id));
+  if (prev.finance) for (const x of [...(next.finance?.activity ?? [])].reverse()) if (!seen.has(x.id)) out.push(`Finance: ${x.action} ${x.target}${x.detail ? ` (${x.detail})` : ""}`);
+  return out;
+}
+
+function queueWebUpdate(title: string, notes: string[]) {
+  if (!notes.length) return;
+  const a = agent();
+  a.webNotes = [...(a.webNotes ?? []), ...notes];
+  clearTimeout(a.webTimer);
+  a.webTimer = setTimeout(() => {
+    const n = a.webNotes ?? [];
+    a.webNotes = [];
+    if (!n.length) return;
+    const shown = n.slice(0, 5).map((x) => `• ${x.slice(0, 160)}`).join("\n");
+    void say(`Update on ${title} from the website:\n${shown}${n.length > 5 ? `\n…and ${n.length - 5} more` : ""}${link("\nDetails: ")}`, `web-${Date.now()}`);
+  }, 8000);
 }
 
 export function startPhotonAgent() {

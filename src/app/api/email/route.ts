@@ -1,15 +1,21 @@
 import { mailConfig, sendEmail } from "../../../lib/mailer";
 import { mailStatus, sendOutbox } from "../../../lib/photonAgent";
+import { relay } from "../../../lib/relay";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(req: Request) {
   const c = mailConfig();
+  if (!c) return (await relay(req, "/api/email")) ?? Response.json({ live: false });
   return Response.json({ live: !!c, from: c?.from, redirect: c?.redirect, ...mailStatus() });
 }
 
 /** { planId, outboxId } sends from the server's active plan (and tracks vendor replies); { to, subject, body } is a one-off send. */
 export async function POST(req: Request) {
+  if (!mailConfig()) {
+    const r = await relay(req, "/api/email");
+    if (r) return r;
+  }
   const j = (await req.json().catch(() => null)) as { planId?: unknown; outboxId?: unknown; to?: unknown; subject?: unknown; body?: unknown; title?: unknown } | null;
   if (!j) return Response.json({ ok: false, error: "bad request" }, { status: 400 });
   if (typeof j.planId === "string" && typeof j.outboxId === "string") {

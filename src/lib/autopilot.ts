@@ -62,7 +62,8 @@ export function planSteps(plan: EventPlan, mandate: SpendMandate): AutopilotStep
 
   const msg = (m: Omit<OutboxMessage, "id" | "status">, actor: string): AutopilotStep => ({
     label: `${actor}: draft ${m.channel} to ${m.to}`,
-    apply: (a, p) => ({
+    apply: (a, p) =>
+      a.outbox.some((x) => x.to === m.to && x.subject === m.subject) ? { a, plan: p } : ({
       a: { ...a, outbox: [...a.outbox, { ...m, id: `m${a.outbox.length}`, status: "draft" }], audit: appendAudit(a.audit, actor, "draft_message", `${m.channel} → ${m.to}: ${m.subject}`) },
       plan: p,
     }),
@@ -72,8 +73,9 @@ export function planSteps(plan: EventPlan, mandate: SpendMandate): AutopilotStep
     label: `Payments: request ${money(amount)} ${purpose.toLowerCase()} for ${vendor}`,
     apply: (a, p) => {
       const base = { id: `p${a.purchases.length}`, idempotencyKey: `${p.id.slice(0, 8)}-${fnv(vendor + purpose)}`, vendor, category, purpose, amount: Math.round(amount), ts: Date.now(), why };
-      if (a.purchases.some((x) => x.idempotencyKey === base.idempotencyKey)) return { a, plan: p };
+      if (a.purchases.some((x) => x.category === category && x.purpose === purpose && x.status !== "blocked")) return { a, plan: p };
       const verdict = evaluate(a.mandate, base, committed(a.purchases));
+      if (verdict.status === "blocked" && a.purchases.some((x) => x.category === category && x.purpose === purpose)) return { a, plan: p };
       const purchase: Purchase = { ...base, ...verdict, card: verdict.status === "auto_approved" ? virtualCard() : undefined };
       let tasks = p.tasks;
       const tid = taskRe && p.tasks.find((t) => taskRe.test(t.title))?.id;
@@ -87,7 +89,7 @@ export function planSteps(plan: EventPlan, mandate: SpendMandate): AutopilotStep
 
   steps.push({
     label: `Payments: load spend mandate (cap ${money(mandate.totalCap)}, approve > ${money(mandate.approvalThreshold)})`,
-    apply: (a, p) => ({ a: { ...a, audit: appendAudit(a.audit, "organizer", "set_mandate", JSON.stringify(mandate)) }, plan: p }),
+    apply: (a, p) => ({ a: { ...a, mandate, audit: appendAudit(a.audit, "organizer", "set_mandate", JSON.stringify(mandate)) }, plan: p }),
   });
 
   if (venue) {
@@ -112,7 +114,8 @@ export function planSteps(plan: EventPlan, mandate: SpendMandate): AutopilotStep
     const q = sl.quotes[sl.pick];
     steps.push({
       label: `Shopper: compared ${sl.quotes.length} ${v.category} quotes → ${q.vendor} (${money(q.price)})`,
-      apply: (a, p) => ({
+      apply: (a, p) =>
+        a.shortlists?.some((x) => x.category === v.category) ? { a, plan: p } : ({
         a: { ...a, shortlists: [...(a.shortlists ?? []), sl], audit: appendAudit(a.audit, "shopper", "shortlist", `${v.category}: ${sl.why}`) },
         plan: p,
       }),
@@ -279,7 +282,20 @@ export function switchQuote(plan: EventPlan, category: string, idx: number): Eve
   const v = evaluate(a.mandate, base, committed(purchases));
   purchases = [...purchases, { ...base, ...v, card: v.status === "auto_approved" ? virtualCard() : undefined }];
   audit = appendAudit(audit, "payments", v.status, `${q.vendor} ${money(base.amount)}: ${v.reason}`);
-  return { ...plan, autopilot: { ...a, purchases, audit, shortlists: a.shortlists!.map((s) => (s === sl ? { ...s, pick: idx } : s)) } };
+  const prev = slug(sl.quotes[sl.pick].vendor);
+  const outbox = [
+    ...a.outbox.filter((m) => m.status === "sent" || !m.to.includes(prev)),
+    {
+      id: `m${a.outbox.length}`,
+      channel: "email" as const,
+      to: `bookings@${slug(q.vendor)}.com`,
+      subject: `Booking request: ${category} for ${plan.brief.title} (${plan.brief.date})`,
+      body: `Hello ${q.vendor} team,\n\nWe'd like to book you for ${plan.brief.title} on ${plan.brief.date}, ${plan.brief.guests.toLocaleString()} guests, at your quoted ${money(q.price)}.\n${plan.brief.constraints.length ? `Requirements: ${plan.brief.constraints.join(", ")}.\n` : ""}Please confirm availability and send your contract and deposit terms.\n\nThanks!`,
+      status: "draft" as const,
+    },
+  ];
+  audit = appendAudit(audit, "shopper", "draft_message", `email → bookings@${slug(q.vendor)}.com`);
+  return { ...plan, autopilot: { ...a, purchases, audit, outbox, shortlists: a.shortlists!.map((s) => (s === sl ? { ...s, pick: idx } : s)) } };
 }
 
 /** Post-purchase: refund a settled deposit back to its single-use card. */

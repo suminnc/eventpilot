@@ -1,7 +1,8 @@
 import { chatJSON, getLLMConfig, type LLMConfig } from "../llm";
 import { applyFeedbackOffline, parseBriefOffline } from "../parse";
 import { billableHours, venueSearchTool, weatherTool } from "../tools";
-import { permitChecklist } from "../permits";
+import { linkPermitTasks, permitChecklist } from "../permits";
+import { allocateBudget } from "../budget";
 import type {
   AgentEvent,
   AgentId,
@@ -134,29 +135,12 @@ function offlineWhy(v: Venue, b: EventBrief, maxHourly: number) {
 }
 
 // ---------------------------------------------------------------- Budget Analyst
-const SPLITS: Record<string, [string, number][]> = {
-  hackathon: [["Food & drinks", 0.38], ["Prizes", 0.18], ["Swag", 0.1], ["AV & Wi-Fi", 0.08], ["Staffing & security", 0.06], ["Marketing", 0.04]],
-  wedding: [["Catering & bar", 0.4], ["Photo & video", 0.12], ["Music / DJ", 0.08], ["Florals & decor", 0.1], ["Attire & beauty", 0.06]],
-  default: [["Food & drinks", 0.4], ["Decor & ambiance", 0.1], ["Entertainment", 0.12], ["AV & equipment", 0.06], ["Supplies & misc", 0.06]],
-};
 
 async function budgetAgent(ctx: Ctx, brief: EventBrief, venue: Venue | undefined): Promise<BudgetLine[]> {
   return step(ctx, "budget", `Allocating ${money(brief.budget)} across categories…`, async () => {
     const hrs = billableHours(brief.durationHours);
     const venueCost = venue ? venue.pricePerHour * hrs : brief.budget * 0.25;
-    const lines = await tool(ctx, "budget", "budget_calculator", JSON.stringify({ total: brief.budget, venueCost, guests: brief.guests }), () => {
-      const contingency = Math.round(brief.budget * 0.08);
-      const remaining = Math.max(0, brief.budget - venueCost - contingency);
-      const split = SPLITS[brief.eventType] || SPLITS.default;
-      const totalW = split.reduce((s, [, w]) => s + w, 0);
-      const out: BudgetLine[] = [{ category: "Venue", amount: Math.round(venueCost), note: venue ? `${venue.name}, ${hrs} billable h @ ${money(venue.pricePerHour)}/hr` : "Estimated" }];
-      for (const [c, w] of split) {
-        const amt = Math.round((remaining * w) / totalW);
-        out.push({ category: c, amount: amt, note: c.startsWith("Food") || c.startsWith("Catering") ? `≈ ${money(amt / brief.guests)} per guest` : "" });
-      }
-      out.push({ category: "Contingency", amount: contingency, note: "8% buffer for surprises" });
-      return out;
-    }, (r) => r.map((l) => `${l.category} ${money(l.amount)}`).join(", "));
+    const lines = await tool(ctx, "budget", "budget_calculator", JSON.stringify({ total: brief.budget, venueCost, guests: brief.guests }), () => allocateBudget(brief, venue),    (r) => r.map((l) => `${l.category} ${money(l.amount)}`).join(", "));
     if (venueCost > brief.budget * 0.5) think(ctx, "budget", `Venue eats ${Math.round((venueCost / brief.budget) * 100)}% of budget — flagging for Critic.`);
     think(ctx, "budget", "Budget math stays deterministic so totals always reconcile to the dollar.");
     return lines;
@@ -214,6 +198,11 @@ async function scheduler(ctx: Ctx, brief: EventBrief, venue: Venue | undefined):
     const draft: ScheduleItem[] = tpl.items.map(([offset, dur, title, detail]) => {
       const t = Math.round((offset * scale * 60) / 5) * 5;
       const abs = sh * 60 + sm + t;
+      const clock = (((abs % 1440) + 1440) % 1440) / 60;
+      const meal = clock >= 5 && clock < 10.5 ? "Breakfast" : clock < 15 && clock >= 10.5 ? "Lunch" : clock >= 17 && clock < 21 ? "Dinner" : clock >= 15 && clock < 17 ? "Afternoon snack" : "Late-night snack";
+      if (/^(Breakfast|Lunch|Dinner)$/.test(title)) title = meal;
+      else if (title === "Check-in & breakfast") title = `Check-in & ${meal.toLowerCase()}`;
+      else if (/^Midnight/.test(title) && !(clock >= 22 || clock < 3)) title = "Late-evening mini-event";
       return {
         day: Math.max(1, Math.floor(abs / 1440) + 1),
         time: addMin(brief.startTime, t),
@@ -222,6 +211,11 @@ async function scheduler(ctx: Ctx, brief: EventBrief, venue: Venue | undefined):
         detail: venue && /load-in|Setup/.test(title) ? `${detail} at ${venue.name}` : detail,
       };
     });
+    const startOf = (i: ScheduleItem) => (i.day ?? 1) * 1440 + Number(i.time.slice(0, 2)) * 60 + Number(i.time.slice(3, 5));
+    for (let i = 0; i < draft.length - 1; i++) {
+      const gap = startOf(draft[i + 1]) - startOf(draft[i]);
+      if (gap > 0 && draft[i].durationMin > gap) draft[i].durationMin = gap;
+    }
     return withLLM(ctx, "scheduler", () => draft, async (llm) => {
       const out = await chatJSON<{ schedule: ScheduleItem[] }>(
         llm,
@@ -319,6 +313,7 @@ async function critic(ctx: Ctx, plan: Omit<EventPlan, "risks" | "score" | "summa
     if (brief.guests > 100) risks.push({ level: "low", issue: "Large headcount — check-in bottleneck", mitigation: "Use QR check-in and two lines staffed by volunteers." });
     const late = (plan.permits ?? []).filter((p) => p.atRisk);
     if (late.length) risks.push({ level: "high", issue: `${late.length} permit${late.length > 1 ? "s" : ""} past normal lead time: ${late.map((p) => p.name).join("; ")}`, mitigation: "Call each agency today for expedited review, and ask the venue which standing permits it already holds." });
+    if (brief.assumptions?.length) risks.push({ level: "low", issue: `Assumed ${brief.assumptions.join(", ")}; not stated in the brief`, mitigation: "Confirm the real details or refine the plan." });
     if (brief.constraints.length) risks.push({ level: "low", issue: `Constraints to verify: ${brief.constraints.join(", ")}`, mitigation: "Get written confirmation from venue/caterer." });
     void tasks;
     const score = Math.max(35, 100 - risks.reduce((s, r) => s + (r.level === "high" ? 18 : r.level === "medium" ? 9 : 3), 0));
@@ -345,9 +340,7 @@ async function critic(ctx: Ctx, plan: Omit<EventPlan, "risks" | "score" | "summa
 async function permitsAgent(ctx: Ctx, brief: EventBrief, venue: Venue | undefined, vendors: Vendor[], tasks: Task[]): Promise<{ permits: Permit[]; tasks: Task[] }> {
   return step(ctx, "permits", "Checking which permits this event needs…", async () => {
     const permits = await tool(ctx, "permits", "permit_lookup", `${brief.city} · ${venue?.name ?? "venue TBD"} · ${brief.guests} guests`, () => permitChecklist(brief, venue, vendors), (r) => `${r.length} permits · ${r.filter((p) => p.atRisk).length} past normal lead time`);
-    const today = new Date().toISOString().slice(0, 10);
-    const linked = permits.map((p, i) => ({ ...p, taskId: `pm${i}` }));
-    const permitTasks: Task[] = linked.map((p) => ({ id: p.taskId, title: `File: ${p.name}`, due: p.deadline < today ? today : p.deadline, owner: "Permits", priority: p.atRisk ? "high" : "medium", done: false, agent: "permits" }));
+    const { permits: linked, tasks: permitTasks } = linkPermitTasks(permits);
     const late = linked.filter((p) => p.atRisk);
     if (late.length) think(ctx, "permits", `${late.map((p) => p.name).join("; ")} normally need more lead time than is left. Flagging for expedited review.`);
     return { permits: linked, tasks: [...tasks, ...permitTasks].sort((a, b) => a.due.localeCompare(b.due)) };
@@ -367,6 +360,16 @@ export async function runPlanner(req: PlanRequest, emit: Emit): Promise<EventPla
     tool(ctx, "logistics", "weather_forecast", `${brief.city} on ${brief.date}`, () => weatherTool(brief.city, brief.date), (w) => `${w.summary}${w.highC != null ? `, high ${Math.round(w.highC)}°C` : ""}`),
   ]);
   let selectedVenue = 0;
+  const prevVenue = req.previous?.venues[req.previous.selectedVenue];
+  if (prevVenue && !/venue|indoor|outdoor|cheaper|cut|reduce|lower/i.test(req.feedback ?? "") && prevVenue.capacity >= brief.guests) {
+    let i = venues.findIndex((v) => v.name === prevVenue.name);
+    if (i < 0) {
+      venues.unshift(prevVenue);
+      i = 0;
+    }
+    selectedVenue = i;
+    think(ctx, "scout", `Keeping your chosen venue, ${prevVenue.name}.`);
+  }
   if ((weather.precipChance ?? 0) >= 40) {
     const indoor = venues.findIndex((v) => v.indoor);
     if (indoor > 0) {
@@ -386,9 +389,10 @@ export async function runPlanner(req: PlanRequest, emit: Emit): Promise<EventPla
     brief,
     venues,
     selectedVenue,
+    ...(req.previous?.autopilot ? { autopilot: req.previous.autopilot } : {}),
     budget,
     schedule,
-    tasks,
+    tasks: tasks.map((t) => ({ ...t, done: !!req.previous?.tasks.some((x) => x.done && x.title === t.title) })),
     vendors,
     permits,
     weather,

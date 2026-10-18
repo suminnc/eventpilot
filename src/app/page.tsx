@@ -100,7 +100,7 @@ export default function Home() {
         </section>
       ) : (
         <section className="mx-auto grid max-w-7xl gap-5 px-6 pb-16 lg:grid-cols-[380px_1fr]">
-          <aside className="flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start">
+          <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-4 lg:self-start">
             <div className="card p-4">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="flex items-center gap-2 text-sm font-medium"><Bot size={15} /> Agent crew</h2>

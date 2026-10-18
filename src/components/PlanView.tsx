@@ -8,6 +8,7 @@ import type { EventPlan } from "@/lib/types";
 import { AGENTS } from "@/lib/types";
 import { planToICS, planToMarkdown } from "@/lib/export";
 import { AutopilotPanel } from "./AutopilotPanel";
+import { reselectVenue } from "@/lib/replan";
 
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 const TABS = ["Overview", "Schedule", "Budget", "Venues", "Tasks", "Permits", "Invite", "Autopilot"] as const;
@@ -117,7 +118,7 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
             {plan.venues.map((v, i) => (
               <button
                 key={v.name}
-                onClick={() => onChange({ ...plan, selectedVenue: i })}
+                onClick={() => onChange(reselectVenue(plan, i))}
                 className={`rounded-xl border p-4 text-left transition ${i === plan.selectedVenue ? "border-accent/60 bg-accent/10" : "border-white/10 bg-black/20 hover:border-white/25"}`}
               >
                 <div className="mb-1 flex items-center justify-between">

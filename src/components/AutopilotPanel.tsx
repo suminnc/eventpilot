@@ -24,7 +24,7 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
   const run = async () => {
     setRunning(true);
     setFeed([]);
-    let state = emptyAutopilot(mandate);
+    let state = plan.autopilot ? { ...plan.autopilot, mandate } : emptyAutopilot(mandate);
     let p: EventPlan = { ...plan, tasks: plan.tasks.map((t) => ({ ...t })) };
     for (const step of planSteps(plan, mandate)) {
       setFeed((f) => [...f, step.label]);
@@ -122,7 +122,7 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
                       {sl.quotes.map((q, i) => (
                         <div key={q.vendor} className={`rounded-lg border p-2 text-xs ${i === sl.pick ? "border-accent/50 bg-accent/10" : "border-white/5"}`}>
                           <div className="flex items-center justify-between gap-2">
-                            <span className="font-medium text-white/90">{q.vendor}</span>
+                            <span className="min-w-0 truncate font-medium text-white/90">{q.vendor}</span>
                             <span className="font-mono">{money(q.price)}</span>
                           </div>
                           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-white/45">
@@ -194,7 +194,7 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
                   <details key={m.id} className="group rounded-lg border border-white/10 bg-black/20 p-3 text-sm">
                     <summary className="flex cursor-pointer list-none items-center gap-2">
                       {m.channel === "sms" ? <MessageSquare size={13} className="text-white/50" /> : <Mail size={13} className="text-white/50" />}
-                      <span className="flex-1 truncate">{m.subject}</span>
+                      <span className="min-w-0 flex-1 truncate">{m.subject}</span>
                       {m.status === "sent" ? (
                         <span className="text-xs text-emerald-300">Sent</span>
                       ) : (
@@ -217,11 +217,11 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
             <div className="scrollbar-thin max-h-56 overflow-y-auto rounded-xl border border-white/10 bg-black/30 font-mono text-[11px]">
               {a.audit.map((e, i) => (
                 <div key={i} className="flex gap-3 border-b border-white/5 px-3 py-1.5 last:border-0">
-                  <span className="text-white/30">{new Date(e.ts).toLocaleTimeString()}</span>
+                  <span className="hidden shrink-0 text-white/30 sm:inline">{new Date(e.ts).toLocaleTimeString()}</span>
                   <span className="w-20 shrink-0 text-accent-soft">{e.actor}</span>
-                  <span className="w-28 shrink-0 text-white/70">{e.action}</span>
-                  <span className="flex-1 truncate text-white/50" title={e.detail}>{e.detail}</span>
-                  <span className="text-white/25">#{e.hash}</span>
+                  <span className="w-24 shrink-0 truncate text-white/70 sm:w-28">{e.action}</span>
+                  <span className="min-w-0 flex-1 truncate text-white/50" title={e.detail}>{e.detail}</span>
+                  <span className="hidden shrink-0 text-white/25 sm:inline">#{e.hash}</span>
                 </div>
               ))}
             </div>

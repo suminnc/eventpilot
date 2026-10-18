@@ -3,13 +3,13 @@ import type { EventBrief } from "./types";
 const TYPES: [RegExp, string][] = [
   [/hackathon|hacks\b|cal ?hacks|treehacks|hackmit/i, "hackathon"],
   [/wedding/i, "wedding"],
+  [/picnic|bbq|barbecue/i, "picnic"],
   [/birthday|bday/i, "birthday party"],
   [/conference|summit|symposium/i, "conference"],
   [/gala|fundrais/i, "gala"],
   [/launch/i, "product launch"],
   [/meetup|networking|mixer/i, "networking meetup"],
   [/workshop|bootcamp/i, "workshop"],
-  [/picnic|bbq|barbecue/i, "picnic"],
   [/offsite|retreat|team/i, "team offsite"],
   [/dinner/i, "dinner"],
   [/concert|festival/i, "festival"],
@@ -19,6 +19,9 @@ const TYPES: [RegExp, string][] = [
 ];
 
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+const WEEKDAY = /\b(next|this|on)?\s*(sun|mon|tue|wed|thu|fri|sat)[a-z]*day\b/;
 
 export function defaultDate(daysOut = 30) {
   const d = new Date(Date.now() + daysOut * 86_400_000);
@@ -31,12 +34,15 @@ export function parseBriefOffline(prompt: string, base: Partial<EventBrief> = {}
   const p = prompt.toLowerCase();
   const eventType = base.eventType || TYPES.find(([re]) => re.test(p))?.[1] || "social event";
 
-  const guestsM = p.replace(/(\d),(\d{3})/g, "$1$2").match(/(\d{1,5})\s*(?:\+\s*)?(?:people|guests|attendees|hackers|folks|ppl|friends|students|pax)/);
-  const budgetM = p.match(/\$\s?(\d[\d,]*(?:\.\d+)?)\s*(k)?/) || p.match(/(\d[\d,]*)\s*(k)?\s*(?:dollars|usd|budget)/);
+  const pn = p.replace(/(\d),(\d{3})/g, "$1$2");
+  const guestsM =
+    pn.match(/(\d{1,5})\s*(?:\+\s*)?(?:people|guests|attendees|hackers|folks|ppl|friends|students|pax|kids|adults|of us)/) ||
+    pn.match(/\b(?:for|party of|table for)\s+(\d{1,5})\b(?!\s*(?:h\b|hours?|hrs?|days?|min|%|am|pm|k\b|:\d))/);
+  const budgetM = p.match(/\$\s?(\d[\d,]*(?:\.\d+)?)\s*(k\b)?/) || p.match(/(\d[\d,]*)\s*(k\b)?\s*(?:dollars|usd|budget)/);
   let budget = base.budget || 0;
   if (!budget && budgetM) budget = parseFloat(budgetM[1].replace(/,/g, "")) * (budgetM[2] ? 1000 : 1);
 
-  const cityM = prompt.match(/\b(?:in|at|near)\s+([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)*(?:,\s?[A-Z]{2})?)/);
+  const cityM = prompt.match(/\bin\s+([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)*(?:,\s?[A-Z]{2})?)/) || prompt.match(/\b(?:at|near)\s+([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)*(?:,\s?[A-Z]{2})?)/);
   const city =
     base.city ||
     (cityM && !/^(the|a)$/i.test(cityM[1]) ? cityM[1] : /cal ?hacks|berkeley/i.test(prompt) ? "San Francisco" : /\bsf\b/i.test(prompt) ? "San Francisco" : "Los Angeles");
@@ -51,8 +57,19 @@ export function parseBriefOffline(prompt: string, base: Partial<EventBrief> = {}
     let y = md[3] ? +md[3] : now.getFullYear();
     if (!md[3] && new Date(y, m, +md[2]) < now) y += 1;
     date = `${y}-${String(m + 1).padStart(2, "0")}-${String(+md[2]).padStart(2, "0")}`;
-  } else if (!date && /next week/.test(p)) date = defaultDate(7);
+  } else if (!date && /\btomorrow\b/.test(p)) date = defaultDate(1);
+  else if (!date && /\btoday\b|\btonight\b/.test(p)) date = defaultDate(0);
+  else if (!date && WEEKDAY.test(p)) {
+    const w = p.match(WEEKDAY)!;
+    const target = DAYS.indexOf(w[2].slice(0, 3));
+    let ahead = (target - new Date().getDay() + 7) % 7 || 7;
+    if (w[1] === "next" && ahead < 3) ahead += 7;
+    date = defaultDate(ahead);
+  } else if (!date && /this weekend/.test(p)) date = defaultDate((6 - new Date().getDay() + 7) % 7 || 7);
+  else if (!date && /next week/.test(p)) date = defaultDate(7);
   else if (!date && /next month/.test(p)) date = defaultDate(30);
+  const assumed: string[] = [];
+  if (!date) assumed.push("the date");
   if (!date) date = defaultDate(eventType === "wedding" ? 180 : eventType === "hackathon" || eventType === "conference" ? 60 : 30);
 
   const timeM = p.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/);
@@ -92,7 +109,11 @@ export function parseBriefOffline(prompt: string, base: Partial<EventBrief> = {}
   if (/transit|metro/.test(p)) constraints.push("near public transit");
   if (/kid|family|children/.test(p)) constraints.push("kid-friendly");
 
+  if (!base.city && !cityM && !/cal ?hacks|berkeley|\bsf\b/i.test(prompt)) assumed.push(`${city} as the city`);
+  if (!base.guests && !guestsM) assumed.push(`${guests} guests`);
+  if (!base.budget && !budgetM) assumed.push("the budget");
   return {
+    assumptions: assumed,
     prompt,
     eventType,
     title: base.title || titleFor(eventType, city, raw),
@@ -123,7 +144,7 @@ export function applyFeedbackOffline(brief: EventBrief, feedback: string): Event
   if (/more budget|splurge|fancier|upscale|bigger budget/.test(f)) b.budget = Math.round(b.budget * 1.3);
   const g = f.replace(/(\d),(\d{3})/g, "$1$2").match(/(\d{1,5})\s*(more\s+)?(?:people|guests|attendees|hackers)/);
   if (g) b.guests = g[2] ? b.guests + +g[1] : +g[1];
-  const $ = f.match(/\$\s?(\d[\d,]*)\s*(k)?/);
+  const $ = f.match(/\$\s?(\d[\d,]*)\s*(k\b)?/);
   if ($) b.budget = parseFloat($[1].replace(/,/g, "")) * ($[2] ? 1000 : 1);
   if (/indoor/.test(f)) b.vibe = b.vibe.replace(/outdoor|rooftop/g, "").trim() + ", indoor";
   if (/outdoor|rooftop/.test(f)) b.vibe += ", outdoor";

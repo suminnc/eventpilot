@@ -1,4 +1,4 @@
-import type { EventBrief, Permit, Vendor, Venue } from "./types";
+import type { EventBrief, Permit, Task, Vendor, Venue } from "./types";
 
 /**
  * Rule-based permit checklist. A planning aid, not legal advice: agencies, fees and lead times are
@@ -72,7 +72,7 @@ export function permitChecklist(brief: EventBrief, venue: Venue | undefined, ven
     add({ name: "Park special event permit", agency: j.parks, why: `${name} is public park space`, leadDays: 30, fee: 800 });
   if (venue && !venue.indoor)
     add({ name: "Temporary tent / canopy permit", agency: j.fire, why: "Tents over ~400 sq ft typically need a fire permit", leadDays: 10, fee: 350 });
-  if (vendors.some((v) => /cater|food/i.test(v.category)))
+  if (vendors.some((v) => /cater|food/i.test(v.category)) && !/restaurant/i.test(venue?.style ?? "") && (brief.guests >= 50 || (venue && !venue.indoor)))
     add({ name: "Temporary food facility permit (or caterer's health permit on file)", agency: j.health, why: "Food served on site to the public", leadDays: 14, fee: 300 });
   if (/alcohol|beer|wine|bar\b|cocktail/.test(text))
     add({ name: "ABC daily / one-day alcohol license", agency: "California Dept. of Alcoholic Beverage Control", why: "Alcohol served or sold", leadDays: 10, fee: 75 });
@@ -85,4 +85,11 @@ export function permitChecklist(brief: EventBrief, venue: Venue | undefined, ven
 
   const daysLeft = Math.ceil((new Date(`${brief.date}T00:00:00`).getTime() - Date.now()) / 86_400_000);
   return out.map((p) => ({ ...p, deadline: addDays(brief.date, -p.leadDays), atRisk: daysLeft < p.leadDays }));
+}
+
+export function linkPermitTasks(permits: Permit[]): { permits: Permit[]; tasks: Task[] } {
+  const today = new Date().toISOString().slice(0, 10);
+  const linked = permits.map((p, i) => ({ ...p, taskId: `pm${i}` }));
+  const tasks: Task[] = linked.map((p) => ({ id: p.taskId, title: `File: ${p.name}`, due: p.deadline < today ? today : p.deadline, owner: "Permits", priority: p.atRisk ? "high" : "medium", done: false, agent: "permits" }));
+  return { permits: linked, tasks };
 }

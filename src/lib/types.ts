@@ -10,6 +10,7 @@ export type EventBrief = {
   budget: number; // USD
   vibe: string;
   constraints: string[];
+  assumptions?: string[];
 };
 
 export type Venue = {

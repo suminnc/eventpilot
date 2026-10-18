@@ -13,7 +13,7 @@ export function defaultMandate(plan: EventPlan): SpendMandate {
     totalCap: b - contingency,
     perPurchaseCap: Math.round(b * 0.3),
     approvalThreshold: Math.max(250, Math.round(b * 0.02)),
-    allowedCategories: Array.from(new Set(["Venue", ...plan.vendors.map((v) => v.category)])),
+    allowedCategories: Array.from(new Set(["Venue", ...plan.vendors.map((v) => v.category), ...(plan.permits?.length ? ["Permits"] : [])])),
   };
 }
 
@@ -132,6 +132,22 @@ export function planSteps(plan: EventPlan, mandate: SpendMandate): AutopilotStep
     steps.push(buy(q.vendor, v.category, `${v.category} deposit (25%)`, q.price * 0.25, new RegExp(`Book AV|${v.category}`, "i"), sl.why));
   }
 
+  for (const pm of plan.permits ?? []) {
+    steps.push(
+      msg(
+        {
+          channel: "email",
+          to: pm.agency,
+          subject: `${pm.atRisk ? "EXPEDITED " : ""}Permit application: ${pm.name} for ${b.title} (${b.date})`,
+          body: `Hello,\n\nWe're applying for a ${pm.name.toLowerCase()} for ${b.title} at ${venue?.name ?? "our venue"}, ${b.city}, on ${b.date} from ${b.startTime} (${b.durationHours}h), ${b.guests.toLocaleString()} attendees.\nReason: ${pm.why}.\n${pm.atRisk ? `We're inside your usual ${pm.leadDays}-day lead time. Is expedited review possible?\n` : ""}Attached: floor plan, run-of-show, certificate of insurance.\n\nPlease let us know of any additional requirements.`,
+          taskId: pm.taskId,
+        },
+        "permits",
+      ),
+    );
+    if (pm.fee > 0) steps.push(buy(pm.agency, "Permits", `Permit fee: ${pm.name}`, pm.fee, undefined, `Filing fee (estimate) for ${pm.name}`));
+  }
+
   steps.push(
     msg({ channel: "email", to: "guest-list", subject: plan.invite.subject, body: plan.invite.body, taskId: findTask(/save-the-date|registration/i) }, "comms"),
     msg({ channel: "sms", to: "guest-list (T-3 days)", subject: "Reminder", body: plan.invite.sms, taskId: findTask(/reminder/i) }, "comms"),
@@ -170,38 +186,53 @@ const MERCHANTS: Record<string, [string, string[]][]> = {
     ["Golden Gate Banquets", ["high-volume", "buffet lines"]],
     ["Mission Street Kitchens", ["halal", "vegan", "gluten-free", "vegetarian"]],
     ["Bay Leaf Catering Co.", ["farm-to-table", "vegetarian"]],
+    ["Sunset Halal Grill", ["halal", "high-volume"]],
+    ["Green Fork Collective", ["vegan", "vegetarian", "gluten-free"]],
+    ["Off the Grid Food Trucks", ["variety", "vegetarian", "budget"]],
   ],
   AV: [
     ["Bay Pro Staging", ["stage", "livestream"]],
     ["SoundCheck AV", ["wi-fi", "budget"]],
     ["Lumen Event Tech", ["livestream", "lighting", "wi-fi"]],
+    ["MeshNet Event Wi-Fi", ["wi-fi", "power"]],
+    ["Presidio Audio Visual", ["stage", "lighting"]],
+    ["Hackbox Rentals", ["power", "wi-fi", "budget"]],
   ],
   Photography: [
     ["Fogline Studio", ["photo", "video"]],
     ["Shutter & Co.", ["photo", "budget"]],
     ["Pixel Pier Media", ["video", "same-day edits"]],
+    ["Campus Lens Collective", ["photo", "budget"]],
+    ["Northbeach Films", ["video", "aftermovie"]],
+    ["Candid Cable Car", ["photo", "same-day edits"]],
   ],
   Rentals: [
     ["Canopy & Co.", ["tents", "heaters"]],
     ["Party Rental Depot", ["budget"]],
     ["Elevate Rentals", ["ada", "accessible", "tents"]],
+    ["Bay Area Tent Works", ["tents"]],
+    ["Fog City Furniture", ["seating", "tables"]],
+    ["AccessAble Event Supply", ["ada", "accessible"]],
   ],
 };
 const SHAPES = [
   { mult: 1.0, rating: 4.6, leadDays: 5, cancellable: true },
   { mult: 0.84, rating: 4.1, leadDays: 12, cancellable: false },
   { mult: 1.17, rating: 4.8, leadDays: 3, cancellable: true },
+  { mult: 0.93, rating: 4.4, leadDays: 4, cancellable: true },
+  { mult: 1.08, rating: 4.7, leadDays: 7, cancellable: false },
+  { mult: 0.76, rating: 3.9, leadDays: 2, cancellable: false },
 ];
 
 const daysUntil = (date: string) => Math.ceil((new Date(`${date}T00:00:00`).getTime() - Date.now()) / 86_400_000);
 
 /** Discovery + decision: gathers 3 quotes for a category and picks one, scored against the brief. */
 export function shortlist(brief: EventBrief, category: string, target: number): Shortlist {
-  const names = MERCHANTS[category] ?? [[`${category} Partners`, []], [`Budget ${category} Co.`, ["budget"]], [`Premier ${category}`, []]];
+  const names = MERCHANTS[category] ?? ([["Partners", []], ["Budget Co.", ["budget"]], ["Premier", []], ["Collective", []], ["Express", []], ["Local", ["budget"]]] as [string, string[]][]).map(([n, t]) => [`${category} ${n}`, t] as [string, string[]]);
   const needs = `${brief.constraints.join(" ")} ${brief.vibe}`.toLowerCase();
   const days = daysUntil(brief.date);
   const quotes: Quote[] = names.map(([vendor, tags], i) => {
-    const sh = SHAPES[(i + fnv(category).charCodeAt(0)) % 3];
+    const sh = SHAPES[(i + fnv(category).charCodeAt(0)) % SHAPES.length];
     return { vendor, tags, price: Math.round((target * sh.mult) / 50) * 50, rating: sh.rating, leadDays: sh.leadDays, cancellable: sh.cancellable };
   });
   const scored = quotes.map((q) => {

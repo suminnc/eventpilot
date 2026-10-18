@@ -23,6 +23,7 @@ export function planToMarkdown(p: EventPlan): string {
     "## Tasks",
     ...p.tasks.map((t) => `- [${t.done ? "x" : " "}] ${t.title} — due ${t.due} (${t.owner})`),
     "",
+    ...(p.permits?.length ? ["## Permits (estimates; verify with each agency)", ...p.permits.map((x) => `- ${x.name} (${x.agency}): file by ${x.deadline}, ~${x.leadDays}d lead, ${x.fee ? money(x.fee) : "no fee"}${x.atRisk ? " **EXPEDITE**" : ""}`), ""] : []),
     "## Risks",
     ...p.risks.map((r) => `- [${r.level}] ${r.issue} → ${r.mitigation}`),
     "",

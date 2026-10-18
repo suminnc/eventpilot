@@ -45,7 +45,7 @@ export default function Home() {
       {!started ? (
         <section className="mx-auto max-w-3xl px-6 pb-20 pt-10 text-center">
           <div className="mx-auto mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
-            <Sparkles size={12} className="text-accent" /> 7 specialist agents · live tools · one prompt
+            <Sparkles size={12} className="text-accent" /> 8 specialist agents · live tools · one prompt
           </div>
           <h1 className="font-display text-5xl leading-[1.05] sm:text-7xl">
             Describe your event.

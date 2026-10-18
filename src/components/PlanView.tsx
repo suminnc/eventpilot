@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import {
+  FileCheck2,
   CalendarDays, Copy, Download, FileText, MapPin, MessageSquare, ShieldAlert, Users, Wallet, CloudSun, Clock, Star, Check,
 } from "lucide-react";
 import type { EventPlan } from "@/lib/types";
@@ -9,7 +10,7 @@ import { planToICS, planToMarkdown } from "@/lib/export";
 import { AutopilotPanel } from "./AutopilotPanel";
 
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
-const TABS = ["Overview", "Schedule", "Budget", "Venues", "Tasks", "Invite", "Autopilot"] as const;
+const TABS = ["Overview", "Schedule", "Budget", "Venues", "Tasks", "Permits", "Invite", "Autopilot"] as const;
 type Tab = (typeof TABS)[number];
 const COLORS = ["#a78bfa", "#38bdf8", "#34d399", "#fbbf24", "#fb923c", "#f472b6", "#f87171", "#94a3b8", "#22d3ee", "#c084fc"];
 
@@ -54,6 +55,7 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
             <button key={t} onClick={() => setTab(t)} className={`rounded-lg px-3 py-1.5 text-sm transition ${tab === t ? "bg-white/10 text-white" : "text-white/50 hover:text-white/80"}`}>
               {t}
               {t === "Tasks" && <span className="ml-1 text-white/40">{done}/{plan.tasks.length}</span>}
+              {t === "Permits" && (plan.permits?.length ?? 0) > 0 && <span className="ml-1 text-white/40">{plan.permits!.filter((p) => plan.tasks.find((x) => x.id === p.taskId)?.done).length}/{plan.permits!.length}</span>}
               {t === "Autopilot" && <span className="ml-1.5 rounded bg-accent/20 px-1 text-[10px] text-accent-soft">{plan.autopilot?.purchases.some((p) => p.status === "pending") ? "approve" : "new"}</span>}
             </button>
           ))}
@@ -169,6 +171,36 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
                 <span className={`rounded px-1.5 py-0.5 font-mono text-[11px] ${t.priority === "high" ? "bg-red-500/15 text-red-200" : "bg-white/5 text-white/50"}`}>{t.due}</span>
               </label>
             ))}
+          </div>
+        )}
+
+        {tab === "Permits" && (
+          <div className="grid gap-3">
+            <p className="flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.02] p-3 text-xs text-white/55">
+              <FileCheck2 size={14} className="mt-0.5 shrink-0 text-accent" />
+              Permits agent checklist for {venue?.name ?? "this venue"} in {b.city}. This is a planning aid, not legal advice: agencies, fees and lead times are typical estimates, so confirm each one with the issuing agency. Autopilot drafts the applications and pays the fees.
+            </p>
+            {(plan.permits ?? []).length === 0 && <p className="text-sm text-white/50">No permits detected. Re-run the plan to generate a checklist.</p>}
+            {(plan.permits ?? []).map((p) => {
+              const filed = plan.tasks.find((x) => x.id === p.taskId)?.done;
+              return (
+                <div key={p.name} className="grid gap-1 rounded-xl border border-white/10 bg-black/20 p-4 sm:grid-cols-[1fr_auto]">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{p.name}</span>
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${filed ? "bg-emerald-500/15 text-emerald-200" : p.atRisk ? "bg-red-500/20 text-red-300" : "bg-white/10 text-white/60"}`}>{filed ? "filed" : p.atRisk ? "expedite" : "to file"}</span>
+                    </div>
+                    <div className="mt-0.5 text-sm text-white/60">{p.agency}</div>
+                    <div className="mt-1 text-xs text-white/45">{p.why}</div>
+                  </div>
+                  <div className="text-left text-xs text-white/50 sm:text-right">
+                    <div className="font-mono text-sm text-white/80">{p.fee ? `$${p.fee.toLocaleString()}` : "no fee"}</div>
+                    <div>~{p.leadDays} days lead time</div>
+                    <div className={p.atRisk ? "text-red-300" : ""}>file by {p.deadline}</div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 

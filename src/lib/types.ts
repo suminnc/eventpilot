@@ -80,6 +80,7 @@ export type EventPlan = {
   schedule: ScheduleItem[];
   tasks: Task[];
   vendors: Vendor[];
+  permits?: Permit[];
   weather: Weather | null;
   invite: { subject: string; body: string; sms: string };
   risks: Risk[];
@@ -123,6 +124,17 @@ export type OutboxMessage = {
 
 export type AuditEntry = { ts: number; actor: string; action: string; detail: string; prev: string; hash: string };
 
+export type Permit = {
+  name: string;
+  agency: string;
+  why: string;
+  leadDays: number;
+  fee: number;
+  deadline: string;
+  atRisk: boolean;
+  taskId?: string;
+};
+
 export type Quote = {
   vendor: string;
   price: number;
@@ -157,6 +169,7 @@ export type AgentId =
   | "logistics"
   | "comms"
   | "critic"
+  | "permits"
   | "payments";
 
 export type AgentEvent =
@@ -176,5 +189,6 @@ export const AGENTS: Record<AgentId, { name: string; role: string; color: string
   logistics: { name: "Logistics", role: "Vendors, weather, tasks", color: "#fb923c" },
   comms: { name: "Comms", role: "Invites & reminders", color: "#f472b6" },
   critic: { name: "Critic", role: "Stress-tests the plan", color: "#f87171" },
+  permits: { name: "Permits", role: "Permits & compliance", color: "#a3e635" },
   payments: { name: "Payments", role: "Guarded agentic checkout", color: "#22d3ee" },
 };

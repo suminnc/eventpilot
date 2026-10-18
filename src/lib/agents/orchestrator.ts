@@ -1,10 +1,12 @@
 import { chatJSON, getLLMConfig, type LLMConfig } from "../llm";
 import { applyFeedbackOffline, parseBriefOffline } from "../parse";
 import { billableHours, venueSearchTool, weatherTool } from "../tools";
+import { permitChecklist } from "../permits";
 import type {
   AgentEvent,
   AgentId,
   BudgetLine,
+  Permit,
   EventBrief,
   EventPlan,
   Risk,
@@ -315,6 +317,8 @@ async function critic(ctx: Ctx, plan: Omit<EventPlan, "risks" | "score" | "summa
     const days = Math.round((new Date(brief.date).getTime() - Date.now()) / 86_400_000);
     if (days < 14) risks.push({ level: "high", issue: `Only ${Math.max(0, days)} days of lead time`, mitigation: "Book venue + catering today; send invites within 24h." });
     if (brief.guests > 100) risks.push({ level: "low", issue: "Large headcount — check-in bottleneck", mitigation: "Use QR check-in and two lines staffed by volunteers." });
+    const late = (plan.permits ?? []).filter((p) => p.atRisk);
+    if (late.length) risks.push({ level: "high", issue: `${late.length} permit${late.length > 1 ? "s" : ""} past normal lead time: ${late.map((p) => p.name).join("; ")}`, mitigation: "Call each agency today for expedited review, and ask the venue which standing permits it already holds." });
     if (brief.constraints.length) risks.push({ level: "low", issue: `Constraints to verify: ${brief.constraints.join(", ")}`, mitigation: "Get written confirmation from venue/caterer." });
     void tasks;
     const score = Math.max(35, 100 - risks.reduce((s, r) => s + (r.level === "high" ? 18 : r.level === "medium" ? 9 : 3), 0));
@@ -336,6 +340,18 @@ async function critic(ctx: Ctx, plan: Omit<EventPlan, "risks" | "score" | "summa
       return { risks: [...risks, ...extra], score: Math.max(35, score - penalty), summary: out.summary || offline.summary };
     });
   }, (r) => `Plan confidence ${r.score}/100 · ${r.risks.filter((x) => x.level === "high").length} high-priority risks`);
+}
+
+async function permitsAgent(ctx: Ctx, brief: EventBrief, venue: Venue | undefined, vendors: Vendor[], tasks: Task[]): Promise<{ permits: Permit[]; tasks: Task[] }> {
+  return step(ctx, "permits", "Checking which permits this event needs…", async () => {
+    const permits = await tool(ctx, "permits", "permit_lookup", `${brief.city} · ${venue?.name ?? "venue TBD"} · ${brief.guests} guests`, () => permitChecklist(brief, venue, vendors), (r) => `${r.length} permits · ${r.filter((p) => p.atRisk).length} past normal lead time`);
+    const today = new Date().toISOString().slice(0, 10);
+    const linked = permits.map((p, i) => ({ ...p, taskId: `pm${i}` }));
+    const permitTasks: Task[] = linked.map((p) => ({ id: p.taskId, title: `File: ${p.name}`, due: p.deadline < today ? today : p.deadline, owner: "Permits", priority: p.atRisk ? "high" : "medium", done: false, agent: "permits" }));
+    const late = linked.filter((p) => p.atRisk);
+    if (late.length) think(ctx, "permits", `${late.map((p) => p.name).join("; ")} normally need more lead time than is left. Flagging for expedited review.`);
+    return { permits: linked, tasks: [...tasks, ...permitTasks].sort((a, b) => a.due.localeCompare(b.due)) };
+  }, (r) => `${r.permits.length} permits on the checklist · ${money(r.permits.reduce((s, p) => s + p.fee, 0))} est. fees`);
 }
 
 // ---------------------------------------------------------------- Orchestrator
@@ -361,7 +377,8 @@ export async function runPlanner(req: PlanRequest, emit: Emit): Promise<EventPla
   const venue = venues[selectedVenue];
 
   const [budget, schedule] = await Promise.all([budgetAgent(ctx, brief, venue), scheduler(ctx, brief, venue)]);
-  const [{ vendors, tasks }, invite] = await Promise.all([logistics(ctx, brief, budget, venue, weather), comms(ctx, brief, venue)]);
+  const [{ vendors, tasks: baseTasks }, invite] = await Promise.all([logistics(ctx, brief, budget, venue, weather), comms(ctx, brief, venue)]);
+  const { permits, tasks } = await permitsAgent(ctx, brief, venue, vendors, baseTasks);
 
   const draft = {
     id: req.previous?.id ?? crypto.randomUUID(),
@@ -373,6 +390,7 @@ export async function runPlanner(req: PlanRequest, emit: Emit): Promise<EventPla
     schedule,
     tasks,
     vendors,
+    permits,
     weather,
     invite,
     mode: llm ? ("llm" as const) : ("offline" as const),

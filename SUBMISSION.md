@@ -1,13 +1,13 @@
 # EventPilot: LA Hacks AI Hackathon 2026 submission notes
 
-**One line:** describe an event in one prompt. A crew of AI agents plans it, then **runs it**: they compare vendors, book them, and pay deposits under a spend mandate you control, writing every step to a tamper-evident audit log. Flagship demo: **Cal Hacks 13.0**, 2,000 hackers, 36 hours, San Francisco.
+**One line:** describe an event in one prompt. A crew of AI agents plans it, then **runs it**: they compare vendors, file permits, book vendors, and pay deposits under a spend mandate you control, writing every step to a tamper-evident audit log. Flagship demo: **Cal Hacks 13.0**, 2,000 hackers, 36 hours, San Francisco.
 
 ## How it works
-1. **Plan.** A Coordinator hands work to Venue Scout, Budget Analyst, Scheduler, Logistics, Comms and a Critic. Their reasoning and tool calls (`venue_search`, `budget_calculator`, live `weather_forecast`) stream into the UI. The model is StepFun `step-5-preview` with `reasoning_effort: low`. Every agent has a deterministic fallback, so a failed model call never breaks the plan.
+1. **Plan.** A Coordinator hands work to Venue Scout, Budget Analyst, Scheduler, Logistics, Comms, Permits and a Critic. The **Permits** agent builds a jurisdiction-aware checklist (fire/assembly, overnight occupancy, amplified sound, Port of SF, food, insurance, police/traffic) with agencies, lead times and estimated fees, and flags any permit that can't clear before the event. Their reasoning and tool calls (`venue_search`, `budget_calculator`, live `weather_forecast`) stream into the UI. The model is StepFun `step-5-preview` with `reasoning_effort: low`. Every agent has a deterministic fallback, so a failed model call never breaks the plan.
 2. **Refine.** Chat follow-ups like "make it 20% cheaper" or "add 500 more hackers" re-run the crew.
-3. **Autopilot.** One click and the **Shopper** collects 3 quotes per vendor category, scores them against the brief and explains its pick. **Logistics** drafts the booking emails. **Payments** pays deposits inside the mandate. You approve anything big, override any pick, send messages, and refund from the receipt.
+3. **Autopilot.** One click and the **Shopper** collects 6 quotes per vendor category, scores them against the brief and explains its pick. **Logistics** drafts the booking emails. **Permits** drafts each application (marked *expedited* when inside the agency's lead time). **Payments** pays deposits and permit fees inside the mandate. You approve anything big, override any pick, send messages, and refund from the receipt.
 
-> Demo data: venue rates and vendor quotes are synthetic estimates. Payments and messages are **simulated**: no real card-network calls, and no real emails or SMS go out.
+> Demo data: venue rates, vendor quotes and permit fees and lead times are estimates. The permit checklist is a planning aid, not legal advice. Payments and messages are **simulated**: no real card-network calls, and no real emails or SMS go out.
 
 ---
 
@@ -16,7 +16,7 @@
 
 | Shopping stage | What EventPilot does |
 |---|---|
-| Discovery | The Shopper collects 3 quotes per category (catering, AV, photography, rentals) |
+| Discovery | The Shopper collects 6 quotes per category (catering, AV, photography, rentals) |
 | Decision-making | Scores price vs. target, rating, lead time and cancellation terms. Rules out vendors that can't deliver before the event date |
 | Personalization | Matches vendors to the brief, e.g. it picks a caterer covering *halal, vegan, gluten-free* because Cal Hacks asked for them |
 | Checkout | One click. The agent books and pays every deposit inside the mandate |

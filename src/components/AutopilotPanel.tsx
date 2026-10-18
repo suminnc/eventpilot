@@ -22,14 +22,14 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
   const [feed, setFeed] = useState<string[]>([]);
   const [mailLive, setMailLive] = useState(false);
   useEffect(() => {
-    fetch("/api/email").then((r) => r.json()).then((j) => setMailLive(!!j.live)).catch(() => {});
+    fetch("/api/email").then((r) => r.json()).then((j) => setMailLive(j.live === true)).catch(() => {});
   }, []);
   const a = plan.autopilot;
 
   const run = async () => {
     setRunning(true);
     setFeed([]);
-    const live = await fetch("/api/email").then((r) => r.json()).then((j) => !!j.live).catch(() => mailLive);
+    const live = await fetch("/api/email").then((r) => r.json()).then((j) => j.live === true).catch(() => false);
     setMailLive(live);
     await runAutopilot(plan, mandate, live, onChange, (label) => setFeed((f) => [...f, label]));
     setRunning(false);
@@ -247,7 +247,10 @@ export async function runAutopilot(plan: EventPlan, mandate: SpendMandate, mailL
     if (mailLive) {
       const r = await fetch("/api/email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ planId: p.id, outboxId: m.id, to: m.to, subject: m.subject, body: m.body, title: p.brief.title }) }).then((x) => x.json()).catch(() => ({ ok: false }));
       if (r.plan) p = r.plan;
-      else if (!r.ok) continue;
+      else if (!r.ok) {
+        onStep(`Email to ${m.to} failed${r.error ? ` (${r.error})` : ""}: kept as a draft, the server sends it once it's reachable`);
+        continue;
+      }
       else p = sendMessage(p, m.id, "autopilot");
     } else p = sendMessage(p, m.id, "autopilot", " (simulated: email is off)");
     onChange(p);

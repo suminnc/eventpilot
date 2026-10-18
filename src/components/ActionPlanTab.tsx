@@ -23,7 +23,7 @@ export function ActionPlanTab({ plan, onChange, children }: { plan: EventPlan; o
   const [step, setStep] = useState("");
   const [mailLive, setMailLive] = useState(false);
   useEffect(() => {
-    fetch("/api/email").then((r) => r.json()).then((j) => setMailLive(!!j.live)).catch(() => {});
+    fetch("/api/email").then((r) => r.json()).then((j) => setMailLive(j.live === true)).catch(() => {});
   }, []);
   const w = buildWorkflow(plan);
   const manual = new Set(plan.workflowDone ?? []);

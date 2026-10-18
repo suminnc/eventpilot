@@ -103,7 +103,7 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
               />
             </div>
             <div>
-              <h3 className="section-head"><ShieldAlert size={15} /> Critic review</h3>
+              <h3 className="section-head"><ShieldAlert size={15} /> Verifier review</h3>
               {plan.risks.map((r, i) => (
                 <div key={i} className="flex gap-4 border-b border-line py-3.5">
                   <div className="w-[72px] shrink-0 pt-0.5">
@@ -308,7 +308,7 @@ function Stat({ icon, label, value, sub }: { icon: React.ReactNode; label: strin
 function Score({ score }: { score: number }) {
   const tone = score >= 80 ? "bg-success-soft text-success" : score >= 60 ? "bg-warning-soft text-warning" : "bg-danger-soft text-danger";
   return (
-    <div className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 ${tone}`} title="Critic's confidence in this plan">
+    <div className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 ${tone}`} title="Verifier's confidence in this plan">
       <Star size={13} className="fill-current" />
       <span className="font-mono text-sm font-semibold">{score}</span>
       <span className="text-xs">/100</span>

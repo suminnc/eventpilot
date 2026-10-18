@@ -82,7 +82,7 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
           <button className="btn-primary py-2.5" onClick={run} disabled={running}>
             {running ? <Loader2 size={14} className="animate-spin" /> : a ? <RotateCcw size={14} /> : <Play size={14} />} {a ? "Re-run Autopilot" : "Run Autopilot"}
           </button>
-          <p className="text-center text-[11px] text-subtle">Demo: payments and messages are simulated</p>
+          <p className="text-center text-[11px] text-subtle">{mailLive ? "Emails send for real (to the test inbox) · payments are simulated" : "Email server unreachable: emails are simulated · payments are simulated"}</p>
         </div>
       </div>
 

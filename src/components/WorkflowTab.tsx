@@ -60,6 +60,21 @@ export function WorkflowTab({ plan, onChange }: { plan: EventPlan; onChange: (p:
         ))}
       </section>
 
+      <section>
+        <h3 className="section-head">Who checks what</h3>
+        {w.checks.map((c) => (
+          <div key={c.handoff} className="grid grid-cols-[minmax(0,1fr)] gap-1 border-b border-line py-3 text-sm sm:grid-cols-[220px_minmax(0,1fr)] sm:gap-4">
+            <div><div className="font-medium text-foreground">{c.handoff}</div><div className="text-xs text-subtle">Checked by {c.checker}</div></div>
+            <div className="text-muted">{c.check}</div>
+          </div>
+        ))}
+      </section>
+
+      <section>
+        <h3 className="section-head">Guardrails</h3>
+        <ul className="pt-2 text-sm text-muted">{w.guardrails.map((g) => <li key={g} className="border-b border-line py-2">{g}</li>)}</ul>
+      </section>
+
       <div className="grid grid-cols-[minmax(0,1fr)] gap-8 md:grid-cols-2">
         <section>
           <h3 className="section-head">Meeting cadence</h3>

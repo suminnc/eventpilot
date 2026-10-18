@@ -9,7 +9,8 @@ export type Team = { name: string; size: string; owns: string; output: string };
 export type GateStatus = "done" | "overdue" | "this_week" | "upcoming" | "past";
 export type Gate = { id: string; tMinus: number; due: string; originalDue: string; title: string; owner: string; detail: string; status: GateStatus };
 export type Scale = "large" | "medium" | "small" | "intimate";
-export type Workflow = { scale: Scale; teams: Team[]; gates: Gate[]; cadence: string[]; trackers: string[]; daysOut: number; compressed: number };
+export type Check = { handoff: string; checker: string; check: string };
+export type Workflow = { scale: Scale; teams: Team[]; gates: Gate[]; cadence: string[]; trackers: string[]; checks: Check[]; guardrails: string[]; daysOut: number; compressed: number };
 
 const DAY = 86_400_000;
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -60,12 +61,12 @@ const GATES: Tpl[] = [
   { id: "sponsor-launch", t: 270, title: "Sponsorship launch", owner: "Sponsorship", detail: "Prospectus with tiers + à la carte, early-bird deadline; past sponsors first, then outbound", when: (c) => c.sponsors },
   { id: "budget-v1", t: 180, title: "Budget v1", small: "Set the budget", owner: "Finance", detail: "Category budgets from past actuals and committed sponsor total; exec signs off" },
   { id: "services-rfq", t: 120, title: "Big services RFQ", owner: "Logistics", detail: "Wifi, power, A/V, furniture: one written spec to ≥5 vendors each; negotiate with competing quotes", when: big },
-  { id: "services-choose", t: 90, title: "Choose big-service vendors", owner: "Logistics", detail: "Final written quotes: what's included, delivery window, cancellation terms", when: big },
+  { id: "services-choose", t: 90, title: "Choose big-service vendors", owner: "Logistics", detail: "Written quotes from ≥5 vendors on one spec, plus performance terms (bandwidth, AP count, usage graphs, remedies); deposits ≤50%", when: big },
   { id: "brand", t: 90, title: "Theme and brand locked", owner: "Design", detail: "Theme, fonts, colors; post a theme guide", when: big },
   { id: "merch-scope", t: 90, title: "Merch scoped + meals shortlisted", owner: "Logistics", detail: "Every item gets a tracker row with vendor spec and order-by; design request dates computed backward", when: (c) => c.merch },
   { id: "apps-open", t: 84, title: "Applications open", owner: "Marketing", detail: "Hacker + judge/mentor/volunteer applications; MLH member-event application if partnering", when: (c) => c.hackathon },
   { id: "rsvp-open", t: 60, title: "Invites / registration open", owner: "Comms", detail: "Send invites or open registration; track RSVPs and dietary needs", when: (c) => !c.hackathon },
-  { id: "meals-final", t: 70, title: "Meals finalized; long-lead merch ordered", owner: "Logistics", detail: "Call caterers for bulk discounts; sea freight needs ~25 days + customs", when: big },
+  { id: "meals-final", t: 70, title: "Meals finalized; long-lead merch ordered", owner: "Logistics", detail: "Individually packaged portions, ~25% vegetarian and 5% vegan/GF, delivered 30 min early, allergen info filed; call caterers for bulk discounts; sea freight needs ~25 days + customs", when: big },
   { id: "walkthrough-1", t: 56, title: "Walkthrough 1 + floorplan v1", owner: "Logistics", detail: "Measure rooms, outlets/circuits, food lines, sleeping, booths, stage; decor rules", when: big },
   { id: "decisions", t: 42, title: "Priority deadline; decisions out", owner: "Marketing", detail: "One-week confirmation window, reminder 48h before it closes", when: (c) => c.hackathon },
   { id: "sponsor-survey", t: 35, title: "Sponsor survey + judge/mentor deadline", owner: "Sponsorship", detail: "On-site names, parking, workshop times, prize tracks, email blurb", when: (c) => c.sponsors },
@@ -123,7 +124,38 @@ export function buildWorkflow(plan: EventPlan, today = iso(new Date())): Workflo
           ...(big(ctx) ? ["Design requests: request due = design due − 2 weeks; design due = order-by − proofs", "Purchase requests: budget-line check + scam check before paying", "Package tracking: every item arrives ≥3 days before load-in"] : []),
           "Contracts folder: upload every signed doc the day it's signed",
         ];
-  return { scale, teams, gates, cadence, trackers, daysOut, compressed: catchUp };
+  if (scale === "large") cadence.push("team@ has a weekly rotating owner, 24-hour reply target; one email domain for every inbox");
+  const lead = teams[0].name;
+  const fin = names.has("Finance") ? "Finance" : lead;
+  const checks: Check[] = little
+    ? [
+        { handoff: "Any purchase", checker: lead, check: "Within budget? Vendor confirmed in writing? Pay by card, deposit ≤50%" },
+        { handoff: "Vendor → you", checker: lead, check: "Confirm final count, delivery window and cancellation terms 2–3 days before" },
+      ]
+    : [
+        ...(names.has("Design") || names.has("Comms & design") ? [{ handoff: "Any team → Design", checker: names.has("Design") ? "Design leads" : "Comms & design", check: "Complete spec (size, bleed, color mode, format, vendor template); 2-week lead time; late requests need the design leads' OK and default to reusing past assets" }] : []),
+        { handoff: "Purchase request → Finance", checker: fin, check: "Budget line has room, automated scam check passes, card over wire, deposit ≤50%; paid within 24h" },
+        { handoff: "Over-budget item or big contract → Exec", checker: lead, check: "Category caps, whether the perk/upgrade is worth it, performance terms on large services" },
+        ...(sponsors ? [
+          { handoff: "Sponsorship → Finance", checker: fin, check: "Contract + invoice only after negotiation ends; one shared deal sheet; counts only once signed" },
+          { handoff: "Sponsorship → Logistics / Marketing", checker: "Logistics", check: "Booth, power and map placement; promo obligations logged with dates" },
+        ] : []),
+        ...(ctx.permits ? [{ handoff: "Logistics → Venue / fire marshal", checker: "Venue", check: "Floorplan approval, permits for gas/flame, fire-rated signage, delivery windows" }] : []),
+        ...(ctx.merch ? [{ handoff: "Vendor proof → requester", checker: "Requester + design", check: "Proof checked (spelling, dates, colors, size) before paying" }] : []),
+        { handoff: "All teams → event run-through", checker: "Leads", check: "Each team's event-day plan reviewed before it's presented" },
+      ];
+  const guardrails = little
+    ? ["Book the venue and food before sending invites", "Keep one guest list with dietary needs", "Get every booking confirmed in writing"]
+    : [
+        "Design dates are computed from vendor order-by dates, so late requests show up months ahead",
+        "Money moves only through the purchase pipeline, never ad-hoc pings or shared vendor logins",
+        "Remaining budget per line is visible before anything is committed",
+        ...(sponsors ? ["No perks or logos on merch before a signed contract; every sponsor gets a POC at signing; flag sponsors silent for 7 days"] : []),
+        "Every shipment is logged with destination, receiver and arrive-by ≥3 days before load-in",
+        ...(big(ctx) ? ["Two walkthroughs at the chosen venue (T-8 weeks and T-2 weeks), not one"] : []),
+        "Retro within 7 days; every project keeps a handoff note for next year",
+      ];
+  return { scale, teams, gates, cadence, trackers, checks, guardrails, daysOut, compressed: catchUp };
 }
 
 /** Short text summary for Photon ("THIS WEEK"). */

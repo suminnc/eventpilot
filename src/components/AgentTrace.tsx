@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef } from "react";
 import { CheckCircle2, Loader2, AlertTriangle } from "lucide-react";
-import { AGENTS, type AgentEvent, type AgentId } from "@/lib/types";
+import { AGENTS, OPTIONAL_AGENTS, SWARM_ROSTER, type AgentEvent, type AgentId } from "@/lib/types";
 
 export function AgentRoster({ events, running }: { events: AgentEvent[]; running: boolean }) {
   const status = useMemo(() => {
@@ -14,7 +14,7 @@ export function AgentRoster({ events, running }: { events: AgentEvent[]; running
   }, [events]);
   return (
     <div>
-      {(Object.keys(AGENTS) as AgentId[]).filter((id) => id !== "payments").map((id) => {
+      {SWARM_ROSTER.filter((id) => !OPTIONAL_AGENTS.includes(id) || status[id]).map((id) => {
         const a = AGENTS[id];
         const st = status[id];
         return (

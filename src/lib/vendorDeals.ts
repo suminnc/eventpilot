@@ -10,12 +10,12 @@ import { chatJSON, getLLMConfig } from "./llm";
 
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 const r50 = (n: number) => Math.round(n / 50) * 50;
-const MAX_ROUNDS = 3;
+const MAX_ROUNDS = 2;
 const MAX_DEPOSIT = 50;
 
 export type Parsed = { intent: "price" | "accept" | "decline" | "question" | "info" | "other"; price?: number; accepts?: boolean; final?: boolean; depositPct?: number; question?: string; summary: string };
 export type Outgoing = { threadId: string; body: string };
-export type Effects = { plan: EventPlan; emails: Outgoing[]; texts: string[] };
+export type Effects = { plan: EventPlan; emails: Outgoing[]; texts: string[]; send?: string[] };
 
 export const isVendorMessage = (m: Pick<OutboxMessage, "to" | "channel">) => m.channel === "email" && /^(bookings|events)@/.test(m.to);
 
@@ -36,6 +36,33 @@ function rivalFor(plan: EventPlan, t: VendorThread): { name: string; price: numb
   if (!sl) return undefined;
   const q = sl.quotes.filter((x) => x.vendor !== t.vendor && !x.note?.startsWith("Needs")).sort((a, b) => a.price - b.price)[0];
   return q ? { name: q.vendor, price: q.price, pick: sl.quotes.indexOf(q) + 1 } : undefined;
+}
+
+/** Exec decision when a vendor declines, walks over the ceiling, or goes silent: switch to the runner-up and email them. */
+function autoSwitch(plan: EventPlan, t: VendorThread, reason: string): { plan: EventPlan; outboxId?: string; text: string } {
+  const a = plan.autopilot!;
+  const sl = a.shortlists?.find((s) => s.category === t.category);
+  const rival = rivalFor(plan, t);
+  if (t.category === "Venue" || !sl || !rival?.pick) return { plan, text: `${t.vendor} (${t.category}) ${reason}. There's no runner-up I can switch to on my own, so this one needs you.` };
+  const idx = rival.pick - 1;
+  const q = sl.quotes[idx];
+  const b = plan.brief;
+  const id = `m${a.outbox.length}`;
+  const msg: OutboxMessage = {
+    id, channel: "email", status: "draft", to: `bookings@${slug(q.vendor)}.com`,
+    subject: `Booking: ${t.category} for ${b.title} (${b.guests.toLocaleString()} guests, ${b.date})`,
+    body: `Hi ${q.vendor} team,\n\nWe're organizing ${b.title} in ${b.city} on ${b.date} (${b.startTime}, ${b.durationHours}h, ${b.guests.toLocaleString()} guests) and would like to book you for ${t.category.toLowerCase()}.\n\nOur budget for this is ${money(q.price)}, in line with the other quotes we've received. Can you confirm availability at that price, and your deposit terms? We cap deposits at 50%.\n\n${sig(plan)}`,
+  };
+  const next: EventPlan = {
+    ...plan,
+    autopilot: {
+      ...a,
+      shortlists: a.shortlists!.map((s) => (s === sl ? { ...s, pick: idx, why: `Switched by Exec: ${t.vendor} ${reason}. ${s.why}` } : s)),
+      outbox: [...a.outbox, msg],
+      audit: appendAudit(a.audit, "exec", "decision", `${t.category}: ${t.vendor} ${reason} → switched to ${q.vendor} (${money(q.price)})`),
+    },
+  };
+  return { plan: next, outboxId: id, text: `Exec decision: ${t.vendor} ${reason}, so I switched ${t.category} to ${q.vendor} (${money(q.price)}) and emailed them. Reply PICK ${t.category.toUpperCase()} <n> to choose differently.` };
 }
 
 /** Starts tracking a vendor conversation once its first email is actually delivered. */
@@ -216,6 +243,7 @@ export function respond(plan: EventPlan, id: string, text: string, r: Parsed, an
   const t: VendorThread = { ...t0, log: [...t0.log, { dir: "in", ts: Date.now(), body: text.slice(0, 4000), price: r.price }], theirPrice: r.price ?? t0.theirPrice, depositPct: r.depositPct ? Math.min(MAX_DEPOSIT, r.depositPct) : t0.depositPct };
   const emails: Outgoing[] = [];
   const texts: string[] = [];
+  const send: string[] = [];
   let p = plan;
   const out = (body: string, price?: number) => {
     emails.push({ threadId: t.id, body });
@@ -256,7 +284,10 @@ export function respond(plan: EventPlan, id: string, text: string, r: Parsed, an
   } else if (r.intent === "decline") {
     t.status = "declined";
     out(`Hi ${t.vendor} team,\n\nUnderstood, thanks for letting us know. We'd love to work with you on a future event.\n\n${sig(p)}`);
-    texts.push(`${t.vendor} declined ${t.category}: "${r.summary.replace(/[.!\s]+$/, "")}".${switchHint}`);
+    const sw = autoSwitch(p, t, `declined ("${r.summary.replace(/[.!\s]+$/, "")}")`);
+    p = sw.plan;
+    if (sw.outboxId) send.push(sw.outboxId);
+    texts.push(sw.text);
   } else if ((r.intent === "accept" || r.accepts) && !r.price) {
     close(t.offer ?? t.target);
   } else if (r.price) {
@@ -264,7 +295,14 @@ export function respond(plan: EventPlan, id: string, text: string, r: Parsed, an
     if (price <= t.target || (t.offer && price <= t.offer)) close(price);
     else if (r.final || t.rounds >= MAX_ROUNDS) {
       if (price <= t.ceiling) close(price);
-      else {
+      else if (t.category !== "Venue" && rival?.pick) {
+        t.status = "declined";
+        out(`Hi ${t.vendor} team,\n\nThanks for the clear answer. ${money(price)} is above what we can spend on ${t.category.toLowerCase()}, so we'll pass this time. We'd love to work with you on a future event.\n\n${sig(p)}`);
+        const sw = autoSwitch(p, t, `held at ${money(price)}, over our ${money(t.ceiling)} ceiling after ${t.rounds} round${t.rounds === 1 ? "" : "s"}`);
+        p = sw.plan;
+        if (sw.outboxId) send.push(sw.outboxId);
+        texts.push(sw.text);
+      } else {
         t.status = "needs_you";
         out(`Hi ${t.vendor} team,\n\nThanks for the clear answer. ${money(price)} is above what we have for ${t.category.toLowerCase()}, so I'm checking with our organizer and will reply within 24 hours.\n\n${sig(p)}`);
         texts.push(`${t.vendor}'s final price for ${t.category} is ${money(price)}, ${money(price - t.target)} over target (ceiling ${money(t.ceiling)}).${switchHint || " Raise the budget in the app, or tell me to walk away."}`);
@@ -289,7 +327,7 @@ export function respond(plan: EventPlan, id: string, text: string, r: Parsed, an
     out(`Hi ${t.vendor} team,\n\nThanks! To lock this in, could you confirm your total price for ${plan.brief.title} on ${plan.brief.date} and your deposit terms?\n\n${sig(p)}`);
   }
   const cur = p.autopilot!.threads ?? threads;
-  return { plan: withThreads(p, cur.map((x) => (x.id === t.id ? t : x))), emails, texts };
+  return { plan: withThreads(p, cur.map((x) => (x.id === t.id ? t : x))), emails, texts, send };
 }
 
 /** Nudges quiet vendors, then flags them to the organizer. */
@@ -297,6 +335,7 @@ export function followUps(plan: EventPlan, now: number, minutes: number): Effect
   const threads = plan.autopilot?.threads ?? [];
   const emails: Outgoing[] = [];
   const texts: string[] = [];
+  const silent: VendorThread[] = [];
   const next = threads.map((t) => {
     if (!["awaiting_reply", "negotiating"].includes(t.status) || t.log.at(-1)?.dir !== "out" || now - t.lastOut < minutes * 60_000) return t;
     if (t.followups < 2) {
@@ -305,12 +344,19 @@ export function followUps(plan: EventPlan, now: number, minutes: number): Effect
       return { ...t, followups: t.followups + 1, lastOut: now, log: [...t.log, { dir: "out" as const, ts: now, body }] };
     }
     if (t.flagged) return t;
-    const rival = rivalFor(plan, t);
-    texts.push(`No reply from ${t.vendor} (${t.category}) after 2 follow-ups.${rival?.pick ? ` Reply PICK ${t.category.toUpperCase()} ${rival.pick} to switch to ${rival.name} (${money(rival.price)}).` : ""}`);
-    return { ...t, flagged: true, status: "needs_you" as const };
+    silent.push(t);
+    return { ...t, flagged: true, status: (t.category === "Venue" ? "needs_you" : "declined") as VendorThread["status"] };
   });
-  if (!emails.length && !texts.length) return { plan, emails, texts };
-  return { plan: withThreads(plan, next, { actor: "negotiator", action: "follow_up", detail: `${emails.length} follow-up(s), ${texts.length} flagged` }), emails, texts };
+  if (!emails.length && !silent.length) return { plan, emails, texts };
+  let p = withThreads(plan, next, { actor: "negotiator", action: "follow_up", detail: `${emails.length} follow-up(s), ${silent.length} gone quiet` });
+  const send: string[] = [];
+  for (const t of silent) {
+    const sw = autoSwitch(p, t, "didn't reply after 2 follow-ups");
+    p = sw.plan;
+    if (sw.outboxId) send.push(sw.outboxId);
+    texts.push(sw.text);
+  }
+  return { plan: p, emails, texts, send };
 }
 
 /** After the organizer decides on a deposit (text or app), confirm or release the vendor by email. */

@@ -76,3 +76,11 @@ Set `SMTP_USER`, `SMTP_PASS` (a Gmail App Password) and `EMAIL_REDIRECT_TO` and 
 - books inside the spend mandate, or texts you for YES before the deposit, then emails the vendor a confirmation (or a polite release if you say NO).
 
 Text **VENDORS** to see every conversation. Payments remain simulated.
+
+## Autonomous Ops Swarm v2.0.0
+
+EventPilot runs as a bounded agent DAG modeled on how large hackathons are actually run:
+
+`exec_scope` → Logistics lead scopes the event and assigns only the category agents that apply (**Food**, **Venue & Services**, **Program & Run-of-show**, **Merch & Gifts**, **People Logistics**, plus **Sponsorship** and **Comms** when relevant) → category agents work in parallel → **Finance gate** (budget line per category, 5% variance tolerance, contingency 10–15%, deposits ≤ 50%, card not wire) → lead reconciles, trade-offs become **Exec decision memos** → independent **Verifier** (owners, dates vs T-minus gates, no unsigned spend, ≥5 quotes for large services) → **Exec approval**.
+
+Autonomy: when a plan is created (by text or in the app) and email is configured, the swarm runs Autopilot, emails every vendor and permit office, negotiates replies (2 rounds max, then Exec decides), follows up on silence, and switches to the runner-up when a vendor declines, holds above the ceiling, or goes quiet. The organizer is texted only for money approvals and decisions it can't make alone. Set `AUTONOMOUS=0` to turn this off. Text **SWARM** to see the agents, Finance verdicts, memos and verification.

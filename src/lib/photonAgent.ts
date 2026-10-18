@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import path from "path";
-import type { EventPlan, TextMessage } from "./types";
+import type { EventPlan, OutboxMessage, TextMessage } from "./types";
 import { discoverLink, isLinked, organizerReplies, photonConfig, textOrganizer } from "./photon";
 import { applyReply, decisionText, planContext, refNum, untexted } from "./decisions";
 import { mailConfig, sendEmail } from "./mailer";
@@ -10,6 +10,7 @@ import { sendMessage, appendAudit, committed, defaultMandate, emptyAutopilot, ne
 import { runPlanner } from "./agents/orchestrator";
 import { answerQuestion } from "./answer";
 import { getLLMConfig } from "./llm";
+import { buildSwarm, swarmText, SWARM_NAME, SWARM_VERSION } from "./swarm";
 import { thisWeekText } from "./workflow";
 import { stakeholderText } from "./stakeholders";
 
@@ -52,8 +53,10 @@ export function snapshot() {
 /** Web app → server. Rejected (409) if the server changed since the client's last sync, so a text decision is never overwritten. */
 export function pushPlan(plan: EventPlan, baseRev: number): boolean {
   if (baseRev !== agent().state.rev) return false;
+  const prev = agent().state.plan;
   setPlan(plan);
   scheduleNotify();
+  if (autonomous() && !plan.autopilot && prev?.id !== plan.id) setTimeout(() => void autoRun(plan.id), 5000);
   return true;
 }
 
@@ -110,7 +113,7 @@ function planSummary(p: EventPlan) {
   const b = p.brief;
   const v = p.venues[p.selectedVenue];
   const risk = p.risks.find((r) => r.level === "high") ?? p.risks[0];
-  return `${b.title} is planned: ${v ? `${v.name}, ` : ""}${b.date} at ${b.startTime}, ${b.guests.toLocaleString()} guests, ${money(b.budget)} budget. Confidence ${p.score}/100${risk ? `; top risk: ${risk.issue}` : ""}.\nReply RUN and I'll negotiate with vendors and book it, or ask me anything.`;
+  return `${b.title} is planned: ${v ? `${v.name}, ` : ""}${b.date} at ${b.startTime}, ${b.guests.toLocaleString()} guests, ${money(b.budget)} budget. Confidence ${p.score}/100${risk ? `; top risk: ${risk.issue}` : ""}.\n${autonomous() ? "The Ops Swarm is taking it from here: emailing vendors and permit offices now. I'll text you for approvals." : "Reply RUN and I'll negotiate with vendors and book it, or ask me anything."}`;
 }
 
 function negotiationText(p: EventPlan, category?: string) {
@@ -146,6 +149,7 @@ export async function handleInbound(text: string, id: string) {
       const p = await runPlanner({ prompt: plan[1].trim() }, () => {});
       setPlan(p);
       await reply(planSummary(p));
+      if (autonomous()) void autoRun(p.id);
     } catch {
       await reply("Sorry, planning failed. Try again, or plan it in the app.");
     } finally {
@@ -181,6 +185,7 @@ export async function handleInbound(text: string, id: string) {
 
   if (/^(this week|week|workflow|todo|to do|whats due|timeline)$/.test(low)) return reply(thisWeekText(p));
   if (/^(vendors|vendor emails|vendor status|inbox|emails|threads|replies)$/.test(low)) return reply(threadsText(p));
+  if (/^(swarm|agents|team|org|raci|who decides)$/.test(low)) return reply(swarmText(p));
   if (/^(stakeholders?|perspectives?|(attendee|sponsor|vendor|organizer|guest)s?( view| side| experience)?)$/.test(low)) return reply(stakeholderText(p));
   if (/^(open( the)? app|app|link|url|website|where( is| do i see)? (it|the app))$/.test(low)) {
     return reply(process.env.APP_URL ? `Open EventPilot: ${process.env.APP_URL}` : "Open EventPilot in your browser where it's running (e.g. http://localhost:3000). Everything you do by text shows up there.");
@@ -324,17 +329,18 @@ async function applyEffects(fx: Effects, key: string) {
     const next = r.ok ? addMessageId(cur, t.id, r.messageId) : cur;
     setPlan({ ...next, autopilot: { ...next.autopilot!, audit: appendAudit(ap.audit, "negotiator", r.ok ? "email_delivered" : "email_failed", `Re: ${t.subject} → ${r.ok ? r.to : r.error} (for ${t.to})`) } });
   }
+  for (const id of fx.send ?? []) await deliverDraft(id);
   let i = 0;
   for (const s of fx.texts) await say(s, `${key}-${i++}`);
   scheduleNotify();
 }
 
-/** Web "Approve & send": sends one outbox message from the active plan and starts tracking the vendor's replies. */
-export async function sendOutbox(planId: string, id: string): Promise<{ ok: boolean; error?: string; plan?: EventPlan; rev?: number } | null> {
+/** Sends one outbox draft from the active plan (real email when configured) and starts tracking vendor replies. */
+async function deliverDraft(id: string): Promise<{ ok: boolean; error?: string }> {
   const p = agent().state.plan;
-  const m = p?.id === planId ? p.autopilot?.outbox.find((x) => x.id === id) : undefined;
-  if (!p || !m) return null;
-  if (m.status === "sent") return { ok: true, plan: p, rev: agent().state.rev };
+  const m = p?.autopilot?.outbox.find((x) => x.id === id);
+  if (!p || !m) return { ok: false, error: "draft not found" };
+  if (m.status === "sent") return { ok: true };
   let messageId: string | undefined, to: string | undefined;
   if (m.channel === "email" && mailConfig()) {
     const r = await sendEmail(m, p.brief.title);
@@ -348,5 +354,45 @@ export async function sendOutbox(planId: string, id: string): Promise<{ ok: bool
     q = openThread(q, m, messageId);
   }
   setPlan(q);
-  return { ok: true, plan: q, rev: agent().state.rev };
+  return { ok: true };
+}
+
+/** Web "Approve & send": sends one outbox message from the active plan. */
+export async function sendOutbox(planId: string, id: string): Promise<{ ok: boolean; error?: string; plan?: EventPlan; rev?: number } | null> {
+  const p = agent().state.plan;
+  if (p?.id !== planId || !p.autopilot?.outbox.some((x) => x.id === id)) return null;
+  const r = await deliverDraft(id);
+  return r.ok ? { ok: true, plan: agent().state.plan!, rev: agent().state.rev } : { ok: false, error: r.error };
+}
+
+// ---- Autonomous mode: the Ops Swarm runs a new plan end to end; only money approvals go to the organizer ----
+
+const autonomous = () => process.env.AUTONOMOUS !== "0" && !!mailConfig();
+const isAutoDraft = (m: OutboxMessage) => m.status === "draft" && m.channel === "email" && (/^(bookings|events)@/.test(m.to) || /Permit application/.test(m.subject));
+
+async function autoRun(planId: string) {
+  const a = agent();
+  const p = a.state.plan;
+  if (!p || p.id !== planId || p.autopilot || a.working) return;
+  a.working = "Ops Swarm running";
+  try {
+    const ran = runAutopilot(p);
+    setPlan({ ...ran, autopilot: { ...ran.autopilot!, audit: appendAudit(ran.autopilot!.audit, "exec", "autonomous_run", `${SWARM_NAME} v${SWARM_VERSION} took over ${p.brief.title}`) } });
+    const ids = agent().state.plan!.autopilot!.outbox.filter(isAutoDraft).map((m) => m.id);
+    let sent = 0;
+    const failed: string[] = [];
+    for (const id of ids) {
+      const r = await deliverDraft(id);
+      if (r.ok) sent++;
+      else failed.push(r.error ?? "failed");
+    }
+    const cur = agent().state.plan!;
+    await say(
+      `${SWARM_NAME} v${SWARM_VERSION} is running ${cur.brief.title} on its own: ${sent} vendor and permit emails sent${failed.length ? ` (${failed.length} failed: ${failed[0]})` : ""}. It negotiates replies, follows up and switches vendors by itself, and texts you only for money approvals. ${buildSwarm(cur).approval} Text SWARM, VENDORS or STATUS anytime.`,
+      `auto-${planId.slice(0, 8)}`,
+    );
+  } finally {
+    a.working = null;
+  }
+  await notifyDecisions();
 }

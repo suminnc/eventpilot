@@ -225,7 +225,17 @@ export type AgentId =
   | "comms"
   | "critic"
   | "permits"
-  | "payments";
+  | "payments"
+  | "exec"
+  | "lead"
+  | "finance"
+  | "venue"
+  | "food"
+  | "program"
+  | "merch"
+  | "people"
+  | "sponsorship"
+  | "verifier";
 
 export type AgentEvent =
   | { type: "agent_start"; agent: AgentId; message: string; ts: number }
@@ -246,4 +256,18 @@ export const AGENTS: Record<AgentId, { name: string; role: string; color: string
   critic: { name: "Critic", role: "Stress-tests the plan", color: "#f87171" },
   permits: { name: "Permits", role: "Permits & compliance", color: "#a3e635" },
   payments: { name: "Payments", role: "Guarded agentic checkout", color: "#22d3ee" },
+  exec: { name: "Exec", role: "Scope, priorities, final sign-off", color: "#3f4a3a" },
+  lead: { name: "Logistics Lead", role: "Scopes needs, assigns, reconciles", color: "#4f6146" },
+  finance: { name: "Finance", role: "Budget owner, cost veto", color: "#8a6d3b" },
+  venue: { name: "Venue & Services", role: "Venue, Wi-Fi, A/V, permits", color: "#38bdf8" },
+  food: { name: "Food", role: "Catering, diets, portions", color: "#fb923c" },
+  program: { name: "Program", role: "Agenda & run-of-show", color: "#fbbf24" },
+  merch: { name: "Merch & Gifts", role: "Swag, prizes, print", color: "#a3e635" },
+  people: { name: "People Logistics", role: "Buses, hotels, travel", color: "#94a3b8" },
+  sponsorship: { name: "Sponsorship", role: "Revenue & deliverables", color: "#22d3ee" },
+  verifier: { name: "Verifier", role: "Independent check before approval", color: "#f87171" },
 };
+
+/** Ops Swarm v2.0.0 roster, in DAG order. Optional agents only show when the Logistics lead assigns them. */
+export const SWARM_ROSTER: AgentId[] = ["exec", "lead", "venue", "food", "program", "merch", "people", "sponsorship", "comms", "finance", "verifier"];
+export const OPTIONAL_AGENTS: AgentId[] = ["food", "merch", "people", "sponsorship"];

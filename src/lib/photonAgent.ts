@@ -117,6 +117,20 @@ function planSummary(p: EventPlan) {
   return `${b.title} is planned: ${v ? `${v.name}, ` : ""}${b.date} at ${b.startTime}, ${b.guests.toLocaleString()} guests, ${money(b.budget)} budget. Confidence ${p.score}/100${risk ? `; top risk: ${risk.issue}` : ""}.\n${autonomous() ? "The Ops Team is taking it from here: emailing vendors and permit offices now. I'll text you for approvals." : "Reply RUN and I'll negotiate with vendors and book it, or ask me anything."}`;
 }
 
+const amounts = (s: string) => [...s.matchAll(/\$\s?([\d,]+(?:\.\d+)?)\s?(k\b)?/gi)].map((m) => parseFloat(m[1].replace(/,/g, "")) * (m[2] ? 1000 : 1));
+
+/** Sanity check on a model-written text: every dollar figure must come from the plan or the question, otherwise drop it. */
+function sane(ans: string | null, ctx: string, question: string): string | null {
+  if (!ans) return null;
+  const known = [...amounts(ctx), ...amounts(question), ...[...question.matchAll(/\b\d[\d,]*\b/g)].map((m) => parseFloat(m[0].replace(/,/g, "")))];
+  const bad = amounts(ans).filter((n) => !known.some((k) => Math.abs(k - n) <= Math.max(1, k * 0.005)));
+  if (bad.length) {
+    console.warn(`[photon] sanity check blocked a reply with unverified amounts: ${bad.join(", ")}`);
+    return null;
+  }
+  return ans;
+}
+
 function threadLine(t: VendorThread) {
   const price = t.agreed ?? t.theirPrice;
   return `${t.category}: ${t.vendor} · ${t.status.replace("_", " ")}${price ? ` at ${money(price)}` : ""}${t.offer && t.status === "negotiating" ? `, we offered ${money(t.offer)}` : ""}`;
@@ -236,13 +250,14 @@ export async function handleInbound(text: string, id: string) {
   }
 
   const amt = (x: string) => parseFloat(x.replace(/[$,]/g, "")) * (/k$/.test(x) ? 1000 : 1);
-  const ctr = low.match(/^(?:negotiate|counter|offer|ask|get|bring|make|push|try)\s+(?:(.+?)\s+)?(?:down\s+)?(?:(?:to|for|at)\s+)?(\$?[\d,]+(?:\.\d+)?k?)(?:\s+(?:instead|total|please|now))?$/);
+  const ctr = low.match(/^(?:negotiate|counter|offer|ask|get|bring|make|push|try)\s+(?:(.+?)\s+)?(?:down\s+)?(?:(?:to|for|at)\s+)?(\$?[\d,]+(?:\.\d+)?k?)(?:\s+(?:instead|total|please|now|confirm))*$/);
   const ctr2 = low.match(/^(\$?[\d,]+(?:\.\d+)?k?)\s+(?:for|on)\s+(.+)$/);
-  const cm = ctr ? { term: ctr[1], price: amt(ctr[2]) } : ctr2 ? { term: ctr2[2], price: amt(ctr2[1]) } : null;
+  const bare = low.match(/^(\$?[\d,]+(?:\.\d+)?k?)(?:\s+(?:instead|total|confirm))*$/);
+  const cm = ctr ? { term: ctr[1], price: amt(ctr[2]) } : ctr2 ? { term: ctr2[2].replace(/\s+confirm$/, ""), price: amt(ctr2[1]) } : bare ? { term: undefined, price: amt(bare[1]) } : null;
   if (cm && cm.price >= 50 && p.autopilot?.threads?.length) {
     const th = findThread(p, cm.term, history.slice(-6).map((h) => h.body));
     if (!th) return reply(`I don't have a vendor conversation matching "${cm.term}". Text VENDORS to see them.`);
-    const fx = counterOffer(p, th.id, cm.price);
+    const fx = counterOffer(p, th.id, cm.price, /\bconfirm$/.test(low));
     const msg = fx.texts.join(" ");
     await applyEffects({ ...fx, texts: [] }, `ctr-${id}`);
     return reply(msg);
@@ -253,14 +268,16 @@ export async function handleInbound(text: string, id: string) {
   if (!p.autopilot) {
     if (/^(status|help|\?|hi|hello|hey|start|whats next|what next)$/.test(low)) return reply(planSummary(p));
     if (/^(yes|no|y|n|approve|reject|all yes|pick|switch)\b/.test(low)) return reply("Autopilot hasn't run yet, so there's nothing to approve. Text RUN to start it.");
-    const ans = await answerQuestion(t, planContext(p), history);
+    const ctx = planContext(p);
+    const ans = sane(await answerQuestion(t, ctx, history), ctx, t);
     return reply(ans ?? planSummary(p));
   }
 
   const r = applyReply(p, t, "iMessage");
   if (r.unknown) {
     a.working = "Thinking";
-    const ans = await answerQuestion(t, planContext(p), history);
+    const ctx = planContext(p);
+    const ans = sane(await answerQuestion(t, ctx, history), ctx, t);
     a.working = null;
     const cur = agent().state.plan ?? p;
     setPlan(log(log(cur, "organizer", "text_question", `iMessage: "${t.slice(0, 80)}"`), "agent", "text_answer", ans ? `answered: "${ans.slice(0, 80)}"` : "no model; sent command help"));

@@ -353,13 +353,16 @@ export function findThread(plan: EventPlan, term?: string, recent: string[] = []
 }
 
 /** Organizer-directed counter-offer: reopens the thread (even after a decline) and emails the vendor the organizer's price. */
-export function counterOffer(plan: EventPlan, id: string, price: number): Effects {
+export function counterOffer(plan: EventPlan, id: string, price: number, force = false): Effects {
   const a = plan.autopilot;
   const t0 = a?.threads?.find((x) => x.id === id);
   if (!a || !t0) return { plan, emails: [], texts: [] };
   if (t0.status === "booked") return { plan, emails: [], texts: [`${t0.vendor} is already booked for ${t0.category} at ${money(t0.agreed ?? t0.target)}, so I won't reopen a confirmed deal.`] };
   const offer = Math.round(price);
   const was = t0.agreed ?? t0.theirPrice;
+  const cat = t0.category.toUpperCase();
+  if (!force && was && offer >= was) return { plan, emails: [], texts: [`${t0.vendor} is already at ${money(was)}, at or below ${money(offer)}, so there's nothing to negotiate.${t0.status === "declined" ? ` To take their price, text NEGOTIATE ${cat} TO ${was} CONFIRM.` : ""}`] };
+  if (!force && offer < (was ?? t0.target) * 0.5) return { plan, emails: [], texts: [`Sanity check: ${money(offer)} is ${Math.round((1 - offer / (was ?? t0.target)) * 100)}% below ${was ? `${t0.vendor}'s ${money(was)}` : `our ${money(t0.target)} target`}, so I haven't emailed them; an offer that low usually ends the conversation. If you meant it, text NEGOTIATE ${cat} TO ${offer} CONFIRM.`] };
   const body = `Hi ${t0.vendor} team,\n\n${t0.status === "declined" ? `Following up on ${plan.brief.title} on ${plan.brief.date}: we'd still love to work with you.` : `Thanks again for working with us on ${plan.brief.title}.`} ${was ? `Before we commit at ${money(was)}, could` : "Could"} you do ${money(offer)} total for ${t0.category.toLowerCase()}? If so, we can confirm right away with a deposit.\n\n${sig(plan)}`;
   const pend = a.purchases.find((x) => x.id === t0.purchaseId && x.status === "pending");
   const purchases = pend ? a.purchases.map((x) => (x === pend ? { ...x, status: "canceled" as const, reason: `Renegotiating at ${money(offer)}` } : x)) : a.purchases;

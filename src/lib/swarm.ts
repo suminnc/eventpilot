@@ -66,7 +66,7 @@ export function buildSwarm(plan: EventPlan, today = new Date().toISOString().sli
     const line = plan.budget.filter((l) => d.line.test(l.category)).reduce((s, l) => s + l.amount, 0);
     const vs = plan.vendors.filter((v) => d.vendor.test(v.category));
     let estimate = vs.reduce((s, v) => s + v.estCost, 0);
-    if (d.key === "venue") estimate += plan.budget.find((l) => l.category === "Venue")?.amount ?? 0;
+    if (d.key === "venue" && !vs.some((v) => /venue/i.test(v.category))) estimate += plan.budget.find((l) => l.category === "Venue")?.amount ?? 0;
     if (!vs.length && d.key !== "venue") estimate = line;
     const why =
       d.key === "people" ? (/bus|shuttle|hotel|travel|flight/.test(text) ? "The brief mentions travel" : "No travel in the brief")
@@ -103,6 +103,14 @@ export function buildSwarm(plan: EventPlan, today = new Date().toISOString().sli
     if (fits) headroom -= over;
   }
 
+  const fees = (plan.permits ?? []).reduce((s, p) => s + (p.fee || 0), 0);
+  if (fees && !plan.budget.some((l) => /permit/i.test(l.category))) {
+    const fits = fees <= headroom;
+    finance.push({ category: "Permits", line: 0, estimate: fees, variancePct: 100, verdict: fits ? "escalate" : "send_back", reason: fits ? `${money(fees)} in permit fees have no budget line: paid from contingency with Exec sign-off` : `${money(fees)} in permit fees exceed the ${money(headroom)} contingency left` });
+    const rec = fits ? `Pay ${money(fees)} permit fees from contingency` : `Find ${money(fees - headroom)} by trimming another category`;
+    memos.push({ id: "memo-permits", topic: `Permit fees (${money(fees)}) aren't budgeted`, options: ["Pay from contingency", "Trim another category", "Ask the venue which permits it already holds"], recommendation: rec, decision: rec, decidedBy: "exec" });
+    if (fits) headroom -= fees;
+  }
   const a = plan.autopilot;
   const threads = a?.threads ?? [];
   const live = (a?.purchases ?? []).filter((p) => p.status === "auto_approved" || p.status === "approved");

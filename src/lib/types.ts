@@ -92,6 +92,7 @@ export type EventPlan = {
   usage?: { calls: number; promptTokens: number; completionTokens: number };
   autopilot?: Autopilot;
   workflowDone?: string[];
+  creao?: { runId: string; ts: number; summary: string; text: string };
 };
 
 export type SpendMandate = {

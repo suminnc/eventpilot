@@ -54,8 +54,20 @@ export function snapshot() {
 }
 
 /** Web app → server. Rejected (409) if the server changed since the client's last sync, so a text decision is never overwritten. */
+/** Older pages logged "(simulated: email is off)" without flagging the message; flag those so they get really emailed. */
+function flagSimulated(plan: EventPlan): EventPlan {
+  const ap = plan.autopilot;
+  if (!ap) return plan;
+  const fake = new Set(ap.audit.filter((e) => e.action === "send_message" && /\(simulated/.test(e.detail)).map((e) => e.detail.replace(/\s*\(simulated.*$/, "")));
+  if (!fake.size) return plan;
+  const real = new Set(ap.audit.filter((e) => e.action === "email_delivered").map((e) => e.detail.split(" → ")[0]));
+  const outbox = ap.outbox.map((m) => (m.status === "sent" && !m.simulated && fake.has(`${m.channel} → ${m.to}`) && !real.has(m.subject) ? { ...m, simulated: true } : m));
+  return outbox.some((m, i) => m !== ap.outbox[i]) ? { ...plan, autopilot: { ...ap, outbox } } : plan;
+}
+
 export function pushPlan(plan: EventPlan, baseRev: number): boolean {
   if (baseRev !== agent().state.rev) return false;
+  if (mailConfig()) plan = flagSimulated(plan);
   const prev = agent().state.plan;
   setPlan(plan);
   scheduleNotify();
@@ -484,6 +496,7 @@ function startMailAgent() {
   a.mailTimer = setInterval(() => void mailTick(), Math.max(5, Number(process.env.VENDOR_POLL_SECONDS || 5)) * 1000);
   setTimeout(() => void mailTick(), 3000);
   // Finish vendor emails a restart interrupted.
+  if (a.state.plan) a.state.plan = flagSimulated(a.state.plan);
   if (autonomous() && a.state.plan?.autopilot?.outbox.some(isAutoDraft)) scheduleWebSend();
 }
 
@@ -550,7 +563,7 @@ async function deliverDraft(id: string): Promise<{ ok: boolean; error?: string }
   const p = agent().state.plan;
   const m = p?.autopilot?.outbox.find((x) => x.id === id);
   if (!p || !m) return { ok: false, error: "draft not found" };
-  if (m.status === "sent") return { ok: true };
+  if (m.status === "sent" && !m.simulated) return { ok: true };
   const a = agent();
   const key = `${p.id}|${m.id}`;
   a.sending ??= new Set();

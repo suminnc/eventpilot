@@ -232,16 +232,17 @@ export function decide(plan: EventPlan, id: string, approve: boolean): EventPlan
 }
 
 /** Drafts Autopilot may send on its own: vendor/venue emails and permit filings. Guest-list and sponsor mass mailings wait for the organizer. */
-export const isAutoDraft = (m: OutboxMessage) => m.status === "draft" && m.channel === "email" && (/^(bookings|events)@/.test(m.to) || /Permit application/.test(m.subject));
+export const isAutoDraft = (m: OutboxMessage) => (m.status === "draft" || !!m.simulated) && m.channel === "email" && (/^(bookings|events)@/.test(m.to) || /Permit application/.test(m.subject));
 
 export function sendMessage(plan: EventPlan, id: string, actor = "organizer", note = ""): EventPlan {
   const a = plan.autopilot!;
   const m = a.outbox.find((x) => x.id === id);
-  if (!m || m.status === "sent") return plan;
+  if (!m || (m.status === "sent" && !m.simulated)) return plan;
+  const simulated = /simulated/.test(note) || undefined;
   return {
     ...plan,
     tasks: m.taskId ? plan.tasks.map((t) => (t.id === m.taskId ? { ...t, done: true } : t)) : plan.tasks,
-    autopilot: { ...a, outbox: a.outbox.map((x) => (x.id === id ? { ...x, status: "sent" } : x)), audit: appendAudit(a.audit, actor, "send_message", `${m.channel} → ${m.to}${note}`) },
+    autopilot: { ...a, outbox: a.outbox.map((x) => (x.id === id ? { ...x, status: "sent", simulated } : x)), audit: appendAudit(a.audit, actor, "send_message", `${m.channel} → ${m.to}${note}`) },
   };
 }
 

@@ -125,6 +125,8 @@ export type OutboxMessage = {
   subject: string;
   body: string;
   status: "draft" | "sent";
+  /** Marked sent while email was off; really emailed once email is live. */
+  simulated?: boolean;
   taskId?: string;
 };
 

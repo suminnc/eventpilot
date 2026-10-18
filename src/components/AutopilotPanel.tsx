@@ -29,7 +29,9 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
   const run = async () => {
     setRunning(true);
     setFeed([]);
-    await runAutopilot(plan, mandate, mailLive, onChange, (label) => setFeed((f) => [...f, label]));
+    const live = await fetch("/api/email").then((r) => r.json()).then((j) => !!j.live).catch(() => mailLive);
+    setMailLive(live);
+    await runAutopilot(plan, mandate, live, onChange, (label) => setFeed((f) => [...f, label]));
     setRunning(false);
   };
 

@@ -34,7 +34,7 @@ export function opsPlan(brief: EventBrief, schedule: ScheduleItem[], venue: Venu
     ? [{ role: "Host", count: 1, note: "Greets guests, owns the reservation and the bill" }]
     : [{ role: "Volunteers", count: volunteers, note: shifts.length > 1 ? `${shifts.length} shifts, 2 shifts each; half staffing overnight` : "Covers check-in, food, wayfinding" }];
   if (g >= 100) staffing.push({ role: "Licensed security", count: Math.max(2, ceil(g / 100)), note: overnight ? "24h coverage incl. overnight rounds; bag check at entry" : "Entry + floor" });
-  if (!small) staffing.push(g >= 1000 ? { role: "EMTs + first-aid station", count: 2 * ceil(g / 2500), note: "On site the whole event; ambulance access route marked" } : g >= 250 ? { role: "EMT", count: 1, note: "First-aid station near check-in" } : { role: "First-aid certified lead", count: 1, note: "Kit + AED location known" });
+  if (!small) staffing.push(g >= 1000 ? { role: "EMTs + first-aid station", count: 2 * ceil(g / 2500) * (overnight ? ceil(brief.durationHours / 12) : 1), note: overnight ? `${2 * ceil(g / 2500)} on duty at all times in 12h rotations (${ceil(brief.durationHours / 12)} shifts); ambulance access route marked` : "On site the whole event; ambulance access route marked" } : g >= 250 ? { role: "EMT", count: 1, note: "First-aid station near check-in" } : { role: "First-aid certified lead", count: 1, note: "Kit + AED location known" });
   if (lanes) staffing.push({ role: "Check-in staff", count: lanes, note: "One per lane at peak, then join floor team" });
   if (hack) {
     staffing.push({ role: "Mentors", count: ceil(g / 20), note: "Staggered; at least 1 on call overnight" });

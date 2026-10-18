@@ -399,6 +399,8 @@ export async function runPlanner(req: PlanRequest, emit: Emit): Promise<EventPla
   const [{ vendors, tasks: baseTasks }, invite] = await Promise.all([logistics(ctx, brief, budget, venue, weather), comms(ctx, brief, venue)]);
   const { permits, tasks: permitTasks } = await permitsAgent(ctx, brief, venue, vendors, baseTasks);
   const ops = await step(ctx, "lead", "Sizing staff, food, Wi-Fi, power and sponsors…", async () => tool(ctx, "lead", "ops_calculator", `${brief.guests} guests · ${brief.durationHours}h · ${schedule.length} schedule blocks`, () => opsPlan(brief, schedule, venue), (o) => `${o.staffing.reduce((s, x) => s + x.count, 0)} staff · ${o.meals.length} meals · ${o.checkin.lanes} check-in lanes${o.sponsors.length ? ` · $${o.sponsorTarget.toLocaleString()} sponsor target` : ""}`), (o) => `Ops sized: ${o.infra.length} infrastructure lines, ${o.policies.length} policies`);
+  const aps = ops.infra.find((i) => /access points/i.test(i.item))?.qty;
+  if (aps) for (const v of vendors) for (const k of ["suggestion", "contactTip"] as const) if (v[k]) v[k] = v[k]!.replace(/~?\d[\d,]*\+?\s*(?:wi-?fi\s+)?(?:access points|APs)\b/gi, `${aps} access points`);
   const tasks = [...permitTasks, ...opsTasks(ops, brief)].sort((a, b) => a.due.localeCompare(b.due));
 
   const draft = {

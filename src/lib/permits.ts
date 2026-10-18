@@ -84,7 +84,13 @@ export function permitChecklist(brief: EventBrief, venue: Venue | undefined, ven
     add({ name: "Event liability insurance (COI naming venue & city)", agency: "Insurance broker", why: "Required by venues and permit offices; typically $1–2M general liability", leadDays: 7, fee: Math.max(300, Math.round(brief.guests * 0.75)) });
 
   const daysLeft = Math.ceil((new Date(`${brief.date}T00:00:00`).getTime() - Date.now()) / 86_400_000);
-  return out.map((p) => ({ ...p, deadline: addDays(brief.date, -p.leadDays), atRisk: daysLeft < p.leadDays }));
+  const today = new Date().toISOString().slice(0, 10);
+  return out.map((p) => {
+    const due = addDays(brief.date, -p.leadDays);
+    return due < today
+      ? { ...p, why: `${p.why}. Normal lead time is ${p.leadDays} days: file today and request expedited review`, deadline: today, atRisk: true }
+      : { ...p, deadline: due, atRisk: daysLeft < p.leadDays };
+  });
 }
 
 export function linkPermitTasks(permits: Permit[]): { permits: Permit[]; tasks: Task[] } {

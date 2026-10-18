@@ -157,7 +157,7 @@ export function planSteps(plan: EventPlan, mandate: SpendMandate, opts: { awaitV
     const guards = ops.staffing.find((x) => /security/i.test(x.role))?.count ?? 0;
     if (guards && !vendors.some((v) => /secur/i.test(v.category))) steps.push(buy("Licensed security contractor", "Staffing", "Security deposit (25%)", guards * hrs * 55 * 0.25, /security guards/i, `${guards} guards × ${hrs}h at ~$55/h`));
     const medic = ops.staffing.find((x) => /emt/i.test(x.role));
-    if (medic) steps.push(buy("Event medical services", "Staffing", "EMT coverage deposit (25%)", medic.count * hrs * 120 * 0.25, /emt|first aid/i, `${medic.count} EMT × ${hrs}h at ~$120/h`));
+    if (medic) steps.push(buy("Event medical services", "Staffing", "EMT coverage deposit (25%)", medic.count * Math.min(hrs, 12) * 120 * 0.25, /emt|first aid/i, `${medic.count} EMT shifts × ${Math.min(hrs, 12)}h at ~$120/h`));
     const sponsorTask = plan.tasks.find((t) => /close sponsors/i.test(t.title))?.id;
     for (const t of ops.sponsors.slice(0, 3)) {
       steps.push(
@@ -341,7 +341,7 @@ const SHAPES = [
 
 const daysUntil = (date: string) => Math.ceil((new Date(`${date}T00:00:00`).getTime() - Date.now()) / 86_400_000);
 
-/** Discovery + decision: gathers 3 quotes for a category and picks one, scored against the brief. */
+/** Discovery + decision: gathers every comparable quote (5–6) for a category and picks one, scored against the brief. */
 export function shortlist(brief: EventBrief, category: string, target: number): Shortlist {
   const names = merchantsFor(category) ?? ([["Bay Area {c} Co.", []], ["{c} Collective", ["budget"]], ["Premier {c}", []], ["Golden Gate {c}", []], ["{c} Express", []], ["Mission {c} Works", ["budget"]]] as [string, string[]][]).map(([n, t]) => [n.replace("{c}", category.split(/\s*[&/,]\s*/)[0] || category), t] as [string, string[]]);
   const quotes: Quote[] = names.map(([vendor, tags], i) => {

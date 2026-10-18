@@ -23,7 +23,7 @@ Check and report PASS/FAIL with numbers for each:
 - Budget lines sum to the brief budget; contingency is 10–15%.
 - Every permit fee is inside a budget line; no permit is due after the event.
 - Every task has an owner and a due date before the event; no orphan budget line (each has an owner/vendor).
-- Large services (venue, catering, AV/Wi-Fi, security) have ≥5 comparable quotes in the plan's notes or vendors; deposits ≤50%.
+- Large services (venue, catering, AV/Wi-Fi, security): the plan names one recommended vendor per category; EventPilot's Autopilot compares 5–6 quotes per category and pays deposits of 25–30% (venue 30%, others 25%) at booking time. FAIL only if `plan.venues` has fewer than 3 options or a stated deposit exceeds 50%.
 - Catering covers every dietary need in the brief; Wi-Fi spec states bandwidth and access-point count for the headcount.
 - Staffing: security and EMT counts suit headcount and duration; overnight events have shift coverage.
 Finish with a verdict: APPROVE, APPROVE WITH FIXES (list them), or BLOCK.

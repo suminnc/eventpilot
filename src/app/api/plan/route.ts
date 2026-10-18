@@ -3,7 +3,7 @@ import type { AgentEvent } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 /** Streams agent events as NDJSON; the last line is {type:"plan"}. */
 export async function POST(req: Request) {

@@ -3,7 +3,7 @@ import { planToMarkdown } from "@/lib/export";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 /**
  * Non-streaming endpoint for external agents (e.g. the Fetch.ai uAgent bridge in /agents).

@@ -23,7 +23,7 @@ import { financeText, itemsOf, submitReimbursement, syncFinance } from "./financ
  */
 
 type State = { rev: number; plan: EventPlan | null; thread: TextMessage[]; since: number; seen: string[]; mailSeen?: string[] };
-type Agent = { state: State; timer?: ReturnType<typeof setInterval>; polling: boolean; working: string | null; error?: string; notify?: ReturnType<typeof setTimeout>; mailTimer?: ReturnType<typeof setInterval>; mailPolling?: boolean; mailError?: string; webNotes?: string[]; webTimer?: ReturnType<typeof setTimeout>; sendTimer?: ReturnType<typeof setTimeout>; planning?: { title: string; prompt: string; events: AgentEvent[] } | null };
+type Agent = { state: State; timer?: ReturnType<typeof setInterval>; polling: boolean; working: string | null; error?: string; notify?: ReturnType<typeof setTimeout>; mailTimer?: ReturnType<typeof setInterval>; mailPolling?: boolean; mailError?: string; webNotes?: string[]; webTimer?: ReturnType<typeof setTimeout>; sendTimer?: ReturnType<typeof setTimeout>; sending?: Set<string>; sentKeys?: string[]; planning?: { title: string; prompt: string; events: AgentEvent[] } | null };
 
 const FILE = path.join(process.cwd(), ".data", "photon-agent.json");
 const g = globalThis as unknown as { __photonAgent?: Agent };
@@ -549,10 +549,17 @@ async function deliverDraft(id: string): Promise<{ ok: boolean; error?: string }
   const m = p?.autopilot?.outbox.find((x) => x.id === id);
   if (!p || !m) return { ok: false, error: "draft not found" };
   if (m.status === "sent") return { ok: true };
+  const a = agent();
+  const key = `${p.id}|${m.id}`;
+  a.sending ??= new Set();
+  // Never email the same draft twice, even if a stale browser copy marks it unsent again.
+  if (a.sending.has(key) || a.sentKeys?.includes(key)) return { ok: true };
   let messageId: string | undefined, to: string | undefined;
   if (m.channel === "email" && mailConfig()) {
-    const r = await sendEmail(m, p.brief.title);
+    a.sending.add(key);
+    const r = await sendEmail(m, p.brief.title).finally(() => a.sending!.delete(key));
     if (!r.ok) return { ok: false, error: r.error };
+    a.sentKeys = [...(a.sentKeys ?? []), key].slice(-500);
     messageId = r.messageId;
     to = r.to;
   }
@@ -600,7 +607,7 @@ function scheduleWebSend() {
       a.working = null;
     }
     await notifyDecisions();
-  }, 3000);
+  }, 20_000);
 }
 
 // ---- Autonomous mode: the Ops Team runs a new plan end to end; only money approvals go to the organizer ----

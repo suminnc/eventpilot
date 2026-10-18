@@ -1,5 +1,11 @@
 /** On a deployment without Photon/email (e.g. Vercel), forwards texting + email API calls to the always-on EventPilot server. */
-export const relayUrl = () => process.env.EVENTPILOT_SERVER_URL?.replace(/\/$/, "") || null;
+const LIVE_SERVER = "https://discussed-latter-lauderdale-concord.trycloudflare.com";
+
+/** Set EVENTPILOT_SERVER_URL=off on Vercel to keep the public site fully simulated. */
+export function relayUrl() {
+  const v = process.env.EVENTPILOT_SERVER_URL ?? (process.env.VERCEL ? LIVE_SERVER : "");
+  return v && v !== "off" ? v.replace(/\/$/, "") : null;
+}
 
 export async function relay(req: Request, path: string): Promise<Response | null> {
   const base = relayUrl();

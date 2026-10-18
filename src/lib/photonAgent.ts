@@ -465,7 +465,10 @@ async function mailTick() {
     if (a.state.plan?.autopilot) await applyEffects(followUps(a.state.plan, Date.now(), followMinutes()), `fu-${Date.now()}`);
     if (a.state.plan?.autopilot) await applyEffects(settle(a.state.plan), `st-${Date.now()}`);
   } catch (e) {
-    a.mailError = e instanceof Error ? e.message.slice(0, 160) : "mail check failed";
+    const msg = e instanceof Error ? e.message.slice(0, 160) : "mail check failed";
+    if (msg !== a.mailError && /invalid login|credentials|auth/i.test(msg))
+      void say("Heads up: Gmail is rejecting EventPilot's login, so vendor emails can't be sent or read. Create a new App Password at myaccount.google.com/apppasswords and update the server.", `mailauth-${new Date().toISOString().slice(0, 13)}`);
+    a.mailError = msg;
   } finally {
     a.mailPolling = false;
   }

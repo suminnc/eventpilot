@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Check, CreditCard, Loader2, Lock, Mail, MessageSquare, Play, Receipt, RotateCcw, Search, ShieldCheck, ShieldX, Star, X } from "lucide-react";
 import type { EventPlan, SpendMandate } from "@/lib/types";
+import { OrganizerTexts } from "./OrganizerTexts";
 import { committed, decide, defaultMandate, emptyAutopilot, planSteps, refund, sendMessage, switchQuote, verifyAudit } from "@/lib/autopilot";
 
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
@@ -107,6 +108,8 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
               </div>
             </div>
           )}
+
+          <OrganizerTexts plan={plan} onChange={onChange} running={running} />
 
           {(a.shortlists?.length ?? 0) > 0 && (
             <section>

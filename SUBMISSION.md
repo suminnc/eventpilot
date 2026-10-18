@@ -6,8 +6,9 @@
 1. **Plan.** A Coordinator hands work to Venue Scout, Budget Analyst, Scheduler, Logistics, Comms, Permits and a Critic. **Logistics** also sizes the operation: volunteer shifts, security and EMTs, Wi-Fi/power/tables/restrooms, meal servings split by diet, check-in lanes, sponsor tiers and a day-of run sheet, rolled up into a readiness score. The **Permits** agent builds a jurisdiction-aware checklist (fire/assembly, overnight occupancy, amplified sound, Port of SF, food, insurance, police/traffic) with agencies, lead times and estimated fees, and flags any permit that can't clear before the event. Their reasoning and tool calls (`venue_search`, `budget_calculator`, live `weather_forecast`) stream into the UI. The model is StepFun `step-5-preview` with `reasoning_effort: low`. Every agent has a deterministic fallback, so a failed model call never breaks the plan.
 2. **Refine.** Chat follow-ups like "make it 20% cheaper" or "add 500 more hackers" re-run the crew.
 3. **Autopilot.** One click and the **Shopper** collects 6 quotes per vendor category, scores them against the brief and explains its pick. **Logistics** drafts the booking emails. **Permits** drafts each application (marked *expedited* when inside the agency's lead time). **Payments** pays deposits (vendors, security, EMTs) and permit fees inside the mandate, and **Comms** drafts sponsor outreach per tier. You approve anything big, override any pick, send messages, and refund from the receipt.
+4. **Decide by text.** Anything over the approval line is texted to the organizer through **Photon 2.0** (iMessage/SMS). Replies like `YES 1`, `ALL YES`, `PICK CATERING 3` or `STATUS` are parsed, applied under the same mandate, written to the audit log, and confirmed by text.
 
-> Demo data: venue rates, vendor quotes and permit fees and lead times are estimates. The permit checklist is a planning aid, not legal advice. Payments and messages are **simulated**: no real card-network calls, and no real emails or SMS go out.
+> Demo data: venue rates, vendor quotes and permit fees and lead times are estimates. The permit checklist is a planning aid, not legal advice. Payments and vendor/guest messages are **simulated**: no real card-network calls, and no vendor or guest emails/SMS go out. The only real messages are the Photon decision texts to the one configured organizer, and only when Photon keys are set.
 
 ---
 
@@ -39,6 +40,13 @@ Running an event like Cal Hacks usually takes a team of 30+ organizers months of
 - **Data and assumptions:** only synthetic venue and vendor data plus the event brief. No employee or personal data.
 - **Responsible AI:** *Transparent* (every pick explains its reasoning and trade-offs), *Accountable* (approval queue and overrides), *Reliable* (deterministic fallbacks, exact budget math, a Critic agent that flags risks and gives a confidence score), *Privacy-preserving* (no personal data), *Fair* (vendors are scored on stated criteria, shown side by side).
 - **Org impact:** new hires can contribute from day one, senior staff stop being the bottleneck, and the mandate teaches company spend policy as they work.
+
+## Photon: Build a Messaging Agent
+EventPilot's agents live in the organizer's iMessage. They don't ping for everything: low-risk deposits go through on their own inside the spend mandate, and the agent texts only when a human call is needed (a deposit over the approval line, a vendor switch that needs a new deposit).
+- **Human in the loop:** the reply is the decision. `YES 1` issues a single-use card, `NO 1` releases it, `PICK CATERING 3` switches vendors, which refunds the old deposit and re-checks the new one against the mandate.
+- **Context that persists:** the thread is stored with the plan, so numbering stays stable across refinements and re-runs, and `STATUS` summarizes spend, open decisions and vendor picks at any time.
+- **Safety and fallbacks:** it only ever texts the one configured organizer. Replies are idempotent (Photon message IDs are deduped and every send uses an idempotency key). Ambiguous replies ("yes" with two open items) get a clarifying question. Already-decided items aren't re-applied. Every text decision is in the hash-chained audit log, and if Photon is down the in-app buttons still work.
+- **Built on Photon 2.0:** `@photon-ai/api` `listMessages`/`sendMessage` on a shared iMessage line (`src/lib/photon.ts`, `src/app/api/photon/route.ts`).
 
 ## Paper: Best Designed Hack
 Design system: warm near-black canvas, a single signal-orange accent (`#ff6a3d`), Instrument Serif display type paired with Geist for UI and Geist Mono for numbers and data. Clear hierarchy: one primary action per screen, a live agent roster, tabbed plan views and an Autopilot console that's easy to scan. Screens were refined in Paper (desktop app + MCP) *(team: add Paper file link and screenshots)*.

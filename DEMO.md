@@ -10,6 +10,7 @@ Run offline (`LLM_API_KEY=` empty) for a fast, reliable demo, or use StepFun for
 | 0:45 | **Permits** | "Seven permits for a pier in SF: fire, overnight occupancy, sound, the Port. Each has an agency, fee and file-by date, and late ones are marked expedite." |
 | 0:55 | **Ops** | "Everything an ops lead forgets: 220 volunteers across 6 shifts, 20 guards, EMTs, 84 Wi-Fi APs, 127 power circuits, meal servings by diet, 17 check-in lanes, a $385k sponsor target. The readiness score lists what's still blocking the event." |
 | 1:15 | **Autopilot** → **Run Autopilot** | "Now the agents act. They compare 6 quotes per category and explain each pick. Small deposits go through on single-use virtual cards. Big ones wait for me." |
-| 1:35 | Approve one deposit, switch a caterer, refund | "I approve, I override, and the old deposit is refunded automatically. Every step lands in a hash-chained audit log, which the UI verifies." |
+| 1:30 | Phone: the iMessage from EventPilot → reply `YES 1` | "Big decisions come to my phone through Photon. I reply YES and the agent pays on a single-use card, logs it and texts back." |
+| 1:40 | Approve one deposit, switch a caterer, refund | "I approve, I override, and the old deposit is refunded automatically. Every step lands in a hash-chained audit log, which the UI verifies." |
 | 1:50 | Type "make it 20% cheaper" | "Refinements keep my choices, checked tasks and payment history." |
 | 2:00 | Ops readiness % went up | "One person, one prompt, a runnable event. Payments and messages are simulated for the demo." |

@@ -167,8 +167,19 @@ export type Shortlist = {
   why: string;
 };
 
+export type TextMessage = {
+  id: string;
+  dir: "out" | "in";
+  body: string;
+  ts: number;
+  via: "photon" | "simulated";
+  queued?: boolean;
+};
+
 export type Autopilot = {
   shortlists?: Shortlist[];
+  texts?: TextMessage[];
+  texted?: string[];
   mandate: SpendMandate;
   purchases: Purchase[];
   outbox: OutboxMessage[];

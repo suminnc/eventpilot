@@ -19,6 +19,7 @@ Order of work: the Coordinator runs first. Scout and Weather run in parallel, th
 
 Other features:
 - **Ops tab**: a readiness score with the open blockers, staffing and safety (volunteer shifts, security, EMTs, mentors, judges), infrastructure sizing (Wi-Fi access points and bandwidth, power circuits, tables, restrooms, trash), meal servings split by diet, sponsor tiers with net cost, the policies to publish, and a day-of run sheet. All of it is computed from headcount and duration using planning rules of thumb.
+- **Organizer texts (Photon 2.0)**: when Autopilot needs a decision (a deposit over your approval line), it texts the organizer over iMessage/SMS through [Photon](https://photon.codes/docs/beta). Reply `YES 1`, `NO 1`, `ALL YES`, `PICK CATERING 3` or `STATUS` and the agents act on it, log it, and text back. Without Photon keys the same thread runs simulated in the Autopilot tab.
 - **Autopilot**: agents carry out the plan. They draft venue holds, vendor RFQs and the invite, and request deposits through a **Payments agent** that works under a spend mandate with step-up approval, single-use virtual cards (simulated), idempotency keys, and a hash-chained audit log.
 - Refine a plan in follow-up chat, e.g. "make it 20% cheaper" or "add 500 more hackers".
 - Pick an alternate venue, check off tasks, and copy the invite or SMS.
@@ -36,6 +37,12 @@ npm run dev                  # http://localhost:3000
 
 Any OpenAI-compatible endpoint works. The default is StepFun `step-5-preview`; Gemini and OpenAI settings are listed in `.env.example`.
 
+### Photon (text the organizer)
+
+1. In the [Photon beta dashboard](https://app.beta.photon.codes) create a project, assign a shared iMessage line to your phone number, and create an API key with `project:read` + `project:write`.
+2. Set `PHOTON_API_KEY`, `PHOTON_PROJECT_ID`, `PHOTON_AGENT_HANDLE` (the assigned line) and `PHOTON_ORGANIZER` (your number, E.164) in `.env.local`.
+3. Text "hi" to the agent line once (shared lines can't start a conversation). EventPilot then texts every Autopilot decision and polls for your replies, so no public webhook is needed. It only ever messages `PHOTON_ORGANIZER`.
+
 ### API
 
 ```bash
@@ -51,7 +58,7 @@ EVENTPILOT_URL=https://<deploy>/api/agent AGENT_SEED="<secret>" python eventpilo
 ```
 
 ## Prize tracks
-Target tracks: Creao, Visa, Workday, Paper, and Cognition/Devin. The write-up for each is in [SUBMISSION.md](SUBMISSION.md). It also fits Applied Intelligence, the Fetch.ai ASI:One challenge, and StepFun.
+Target tracks: Creao, Visa, Workday, Paper, Cognition/Devin, and Photon (messaging agent). The write-up for each is in [SUBMISSION.md](SUBMISSION.md). It also fits Applied Intelligence, the Fetch.ai ASI:One challenge, and StepFun.
 
 ## Stack
 Next.js 15 (App Router) · React 19 · Tailwind v4 · TypeScript · lucide-react. Venue rates are planning estimates, not quotes.

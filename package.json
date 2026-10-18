@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@photon-ai/api": "^0.5.0",
     "lucide-react": "^1.59.0",
     "next": "15.5.28",
     "react": "19.1.0",

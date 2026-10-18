@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0d0c0a;
-  --foreground: #f1ece4;
+  --background: #ffffff;
+  --foreground: #14161a;
 }
 
 @theme inline {
@@ -11,8 +11,21 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-display: var(--font-display);
-  --color-accent: #ff6a3d;
-  --color-accent-soft: #ffb598;
+  --color-accent: #4f6146;
+  --color-accent-soft: #eef1e8;
+  --color-muted: #5f6570;
+  --color-subtle: #8a909a;
+  --color-line: #e6e8ec;
+  --color-surface: #eef2f5;
+  --color-success: #15803d;
+  --color-success-soft: #ecfdf3;
+  --color-warning: #b45309;
+  --color-warning-soft: #fff7eb;
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fef1f1;
+  --radius-lg: 4px;
+  --radius-xl: 6px;
+  --radius-2xl: 8px;
 }
 
 body {
@@ -21,29 +34,27 @@ body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
-.bg-grid {
-  background-image:
-    radial-gradient(ellipse 70% 40% at 50% -12%, rgba(255, 106, 61, 0.14), transparent 65%),
-    radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-  background-size: auto, 22px 22px;
-}
-
 @utility card {
-  @apply rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur;
+  @apply rounded-2xl border border-line bg-background;
 }
 
 @utility input {
-  @apply w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none transition placeholder:text-white/30 focus:border-accent/60 focus:ring-2 focus:ring-accent/20;
+  @apply w-full rounded-xl border border-line bg-background px-3 py-2 text-sm text-foreground outline-none transition placeholder:text-subtle focus:border-accent focus:ring-2 focus:ring-accent/15 disabled:opacity-60;
 }
 
 @utility btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50;
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40;
 }
 @utility btn-primary {
-  @apply btn bg-accent font-semibold text-[#1a0d07] hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
+  @apply btn bg-accent font-semibold text-white hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
 }
 @utility btn-ghost {
-  @apply btn border border-white/10 bg-white/[0.04] text-white/80 hover:bg-white/[0.08];
+  @apply btn border border-line bg-background text-foreground hover:bg-surface;
+}
+
+/* Small caps section label with a strong rule underneath */
+@utility section-head {
+  @apply flex items-center gap-2 border-b border-foreground pb-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-foreground;
 }
 
 @keyframes fade-up {
@@ -52,13 +63,7 @@ body {
 }
 .fade-up { animation: fade-up 0.35s ease-out both; }
 
-@keyframes pulse-ring {
-  0% { box-shadow: 0 0 0 0 currentColor; }
-  100% { box-shadow: 0 0 0 8px transparent; }
-}
-.pulse-ring { animation: pulse-ring 1.2s ease-out infinite; }
-
 .scrollbar-thin::-webkit-scrollbar { width: 6px; }
-.scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(20, 22, 26, 0.14); border-radius: 3px; }
 
 .font-display { font-family: var(--font-display), Georgia, serif; font-weight: 400; letter-spacing: -0.01em; }

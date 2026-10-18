@@ -93,6 +93,8 @@ export type EventPlan = {
   autopilot?: Autopilot;
   workflowDone?: string[];
   creao?: { runId: string; ts: number; summary: string; text: string };
+  dayops?: import("./dayops").DayOps;
+  finance?: import("./finance").Finance;
 };
 
 export type SpendMandate = {

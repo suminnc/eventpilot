@@ -1,8 +1,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import path from "path";
-import type { EventPlan, TextMessage } from "./types";
+import type { EventPlan, TextMessage, VendorThread } from "./types";
 import { discoverLink, isLinked, organizerReplies, photonConfig, textOrganizer } from "./photon";
-import { applyReply, decisionText, planContext, refNum, untexted } from "./decisions";
+import { applyReply, decisionText, planContext, refNum, untexted, help } from "./decisions";
 import { mailConfig, sendEmail } from "./mailer";
 import { fetchReplies } from "./mailbox";
 import { answerVendor, interpret, matchThread, openThread, respond, followUps, settle, threadsText, type Effects, counterOffer, findThread } from "./vendorDeals";
@@ -117,10 +117,21 @@ function planSummary(p: EventPlan) {
   return `${b.title} is planned: ${v ? `${v.name}, ` : ""}${b.date} at ${b.startTime}, ${b.guests.toLocaleString()} guests, ${money(b.budget)} budget. Confidence ${p.score}/100${risk ? `; top risk: ${risk.issue}` : ""}.\n${autonomous() ? "The Ops Team is taking it from here: emailing vendors and permit offices now. I'll text you for approvals." : "Reply RUN and I'll negotiate with vendors and book it, or ask me anything."}`;
 }
 
-function negotiationText(p: EventPlan, category?: string) {
+function threadLine(t: VendorThread) {
+  const price = t.agreed ?? t.theirPrice;
+  return `${t.category}: ${t.vendor} · ${t.status.replace("_", " ")}${price ? ` at ${money(price)}` : ""}${t.offer && t.status === "negotiating" ? `, we offered ${money(t.offer)}` : ""}`;
+}
+
+function negotiationText(p: EventPlan, category?: string, recent: string[] = []) {
   const a = p.autopilot!;
   const sls = (a.shortlists ?? []).filter((s) => !category || s.category.toLowerCase().startsWith(category));
-  if (!sls.length) return category ? `No quotes for "${category}". Categories: ${(a.shortlists ?? []).map((s) => s.category).join(", ")}.` : "No vendor quotes yet.";
+  const th = category ? findThread(p, category, recent) : undefined;
+  if (category && th && (!sls.length || !sls.some((s) => s.category === th.category))) {
+    const log = th.log.slice(-4).map((e) => `${e.dir === "out" ? "Me" : "Them"}: ${e.body.replace(/^Hi [^\n]*\n+/, "").replace(/\n*Best,[\s\S]*$/, "").replace(/\s+/g, " ").slice(0, 160)}`).join("\n");
+    return `${threadLine(th)}\n${log}\nTo counter, text NEGOTIATE ${th.category.toUpperCase()} TO <price>.`;
+  }
+  const extra = (a.threads ?? []).filter((t) => !sls.some((s) => s.category === t.category)).map(threadLine);
+  if (!sls.length) return category ? `No quotes or vendor emails for "${category}". Categories: ${[...new Set([...(a.shortlists ?? []).map((s) => s.category), ...(a.threads ?? []).map((t) => t.category)])].join(", ")}.` : extra.length ? extra.join("\n") : "No vendor quotes yet.";
   if (category && sls.length === 1) {
     const q = sls[0].quotes[sls[0].pick];
     return `${sls[0].category} · ${q.vendor}\n${(q.rounds ?? []).map((r) => `${r.by === "agent" ? "Me" : "Them"}: ${r.note}`).join("\n") || "Not negotiated."}`;
@@ -129,7 +140,7 @@ function negotiationText(p: EventPlan, category?: string) {
     const q = s.quotes[s.pick];
     return q.listPrice && q.listPrice > q.price ? `${s.category}: ${q.vendor} ${money(q.listPrice)} → ${money(q.price)} (−${Math.round(((q.listPrice - q.price) / q.listPrice) * 100)}%)` : `${s.category}: ${q.vendor} ${money(q.price)}`;
   });
-  return `Negotiated ${money(negotiatedSavings(a))} off in total.\n${lines.join("\n")}\nText NEGOTIATE ${sls[0].category.toUpperCase()} to see the back-and-forth.`;
+  return `Negotiated ${money(negotiatedSavings(a))} off in total.\n${[...lines, ...extra].join("\n")}\nText NEGOTIATE <CATEGORY> for the back-and-forth, or NEGOTIATE <CATEGORY> TO <price> to counter.`;
 }
 
 const HELLO = `Hi, I'm EventPilot. Text PLAN and describe your event, e.g. "PLAN a 120-person founder mixer in SF next Friday, $15k". Then text RUN and I'll negotiate with vendors and book it, checking with you before big payments.`;
@@ -140,7 +151,8 @@ export async function handleInbound(text: string, id: string) {
   const reply = (s: string) => say(s, `in-${id}-${n++}`);
   const t = text.trim();
   const low = t.toLowerCase().replace(/[’']/g, "").replace(/[.!?]+$/, "");
-  const history = a.state.thread.slice(-8, -1).map(({ dir, body }) => ({ dir, body }));
+  const since = a.state.plan ? Date.parse(a.state.plan.createdAt) || 0 : 0;
+  const history = a.state.thread.slice(0, -1).filter((m) => m.ts >= since).slice(-7).map(({ dir, body }) => ({ dir, body }));
 
   const plan = t.match(/^(?:plan|new event|organi[sz]e)\b[\s:,-]+([\s\S]{6,})$/i);
   if (plan) {
@@ -224,7 +236,7 @@ export async function handleInbound(text: string, id: string) {
   }
 
   const amt = (x: string) => parseFloat(x.replace(/[$,]/g, "")) * (/k$/.test(x) ? 1000 : 1);
-  const ctr = low.match(/^(?:negotiate|counter|offer|ask|get|bring)\s+(?:(.+?)\s+)?(?:down\s+)?(?:to|for|at)\s+(\$?[\d,]+(?:\.\d+)?k?)$/);
+  const ctr = low.match(/^(?:negotiate|counter|offer|ask|get|bring|make|push|try)\s+(?:(.+?)\s+)?(?:down\s+)?(?:(?:to|for|at)\s+)?(\$?[\d,]+(?:\.\d+)?k?)(?:\s+(?:instead|total|please|now))?$/);
   const ctr2 = low.match(/^(\$?[\d,]+(?:\.\d+)?k?)\s+(?:for|on)\s+(.+)$/);
   const cm = ctr ? { term: ctr[1], price: amt(ctr[2]) } : ctr2 ? { term: ctr2[2], price: amt(ctr2[1]) } : null;
   if (cm && cm.price >= 50 && p.autopilot?.threads?.length) {
@@ -235,8 +247,8 @@ export async function handleInbound(text: string, id: string) {
     await applyEffects({ ...fx, texts: [] }, `ctr-${id}`);
     return reply(msg);
   }
-  const neg = low.match(/^(?:negotiate|negotiation|savings|deals?)(?:\s+([a-z &]+))?$/);
-  if (neg) return reply(p.autopilot ? negotiationText(p, neg[1]?.trim()) : "I haven't negotiated yet. Text RUN and I'll get quotes and haggle first.");
+  const neg = low.match(/^(?:negotiate|negotiation|savings|deals?)(?:\s+([a-z &]+?))?(?:\s+(?:now|please|again))?$/);
+  if (neg) return reply(p.autopilot ? negotiationText(p, neg[1]?.trim(), history.map((h) => h.body)) : "I haven't negotiated yet. Text RUN and I'll get quotes and haggle first.");
 
   if (!p.autopilot) {
     if (/^(status|help|\?|hi|hello|hey|start|whats next|what next)$/.test(low)) return reply(planSummary(p));
@@ -252,7 +264,7 @@ export async function handleInbound(text: string, id: string) {
     a.working = null;
     const cur = agent().state.plan ?? p;
     setPlan(log(log(cur, "organizer", "text_question", `iMessage: "${t.slice(0, 80)}"`), "agent", "text_answer", ans ? `answered: "${ans.slice(0, 80)}"` : "no model; sent command help"));
-    return reply(ans ?? r.reply);
+    return reply(ans ?? `${planSummary(p)}\n${help(p)}`);
   }
   const ap = r.plan.autopilot!;
   const asked = ap.purchases.filter((x) => x.status === "pending" && r.reply.includes(`#${refNum(x)} `)).map((x) => x.id);

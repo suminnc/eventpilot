@@ -336,7 +336,7 @@ const lastTouch = (t: VendorThread) => Math.max(t.lastOut, t.log.at(-1)?.ts ?? 0
 export function findThread(plan: EventPlan, term?: string, recent: string[] = []): VendorThread | undefined {
   const ts = plan.autopilot?.threads ?? [];
   const q = (term ?? "").toLowerCase().replace(/^(the|our)\s+/, "").trim();
-  if (q && q !== "it" && q !== "that") {
+  if (q && !["it", "that", "for", "this", "them"].includes(q)) {
     const words = q.split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !["the", "and", "for"].includes(w));
     const score = (t: VendorThread) => {
       const hay = `${t.category} ${t.vendor}`.toLowerCase();

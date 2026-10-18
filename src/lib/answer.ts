@@ -22,7 +22,7 @@ export async function answerQuestion(question: string, context: string, history:
       cfg,
       SYSTEM,
       `PLAN FACTS\n${context.slice(0, 9000) || "(no event planned yet)"}\n\nRECENT TEXTS\n${convo || "(none)"}\n\nORGANIZER'S QUESTION\n${question.trim().slice(0, 500)}`,
-      { temperature: 0.4, timeoutMs: 40000 },
+      { temperature: 0.4, timeoutMs: 25000 },
     );
     const reply = typeof r.reply === "string" ? r.reply.replace(/[*_`#]/g, "").trim().slice(0, 600) : "";
     return reply || null;

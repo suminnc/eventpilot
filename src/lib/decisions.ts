@@ -9,11 +9,9 @@ const ref = (p: Purchase) => `#${refNum(p)}`;
 const line = (p: Purchase) => `${ref(p)} ${p.purpose} · ${p.vendor} · ${money(p.amount)}`;
 export function help(plan: EventPlan): string {
   const a = plan.autopilot;
-  const first = a?.purchases.find((p) => p.status === "pending");
-  const n = first ? refNum(first) : null;
-  const sl = a?.shortlists?.[0];
-  const pick = sl ? `PICK ${sl.category.toUpperCase()} ${((sl.pick + 1) % sl.quotes.length) + 1}, ` : "";
-  return n || pick ? `Reply ${n ? `YES ${n}, NO ${n}, ALL YES, ` : ""}${pick}or STATUS.` : "Text STATUS anytime.";
+  const pending = a?.purchases.filter((p) => p.status === "pending") ?? [];
+  const n = pending.length ? refNum(pending[pending.length - 1]) : null;
+  return n ? `Reply YES ${n}, NO ${n}${pending.length > 1 ? ", ALL YES" : ""} or STATUS.` : "Text STATUS, VENDORS or NEGOTIATE <CATEGORY> TO <price> anytime.";
 }
 
 export function untexted(plan: EventPlan): Purchase[] {
@@ -31,11 +29,17 @@ export function statusText(plan: EventPlan): string {
   const a = plan.autopilot;
   if (!a) return `EventPilot · ${plan.brief.title}\nAutopilot hasn't run yet. Reply RUN to start it.`;
   const pending = a.purchases.filter((p) => p.status === "pending");
-  const picks = (a.shortlists ?? []).map((s) => `${s.category}: ${s.quotes[s.pick].vendor} (${money(s.quotes[s.pick].price)})`);
+  const label: Record<string, string> = { awaiting_reply: "waiting for reply", negotiating: "negotiating", agreed: "agreed, needs your OK", booked: "booked", declined: "released", needs_you: "needs you" };
+  const threads = a.threads ?? [];
+  const picks = [
+    ...threads.map((t) => `${t.category}: ${t.vendor} ${money(t.agreed ?? t.theirPrice ?? t.target)} (${label[t.status] ?? t.status})`),
+    ...(a.shortlists ?? []).filter((s) => !threads.some((t) => t.category === s.category)).map((s) => `${s.category}: ${s.quotes[s.pick].vendor} (${money(s.quotes[s.pick].price)})`),
+  ];
   return [
     `EventPilot · ${plan.brief.title}`,
     `${money(committed(a.purchases))} committed of ${money(a.mandate.totalCap)}.`,
     pending.length ? `Waiting on you:\n${pending.map(line).join("\n")}` : "Nothing is waiting on you.",
+    ...(threads.some((t) => t.category === "Venue") && !threads.some((t) => t.category === "Venue" && (t.status === "booked" || t.status === "agreed")) ? ["No venue is locked yet. Text NEGOTIATE VENUE TO <price> to reopen talks."] : []),
     ...(picks.length ? [`Vendors: ${picks.join("; ")}.`] : []),
     help(plan),
   ].join("\n");
@@ -57,7 +61,7 @@ export function applyReply(plan: EventPlan, text: string, via: string): { plan: 
     const total = items.reduce((s, p) => s + p.amount, 0);
     return approve
       ? `Approved ${items.map((p) => `${ref(p)} ${p.vendor} ${money(p.amount)} on ${find(p.id).card}`).join("; ")}.${items.length > 1 ? ` Total ${money(total)}.` : ""}`
-      : `Rejected ${items.map((p) => `${ref(p)} ${p.vendor}`).join(", ")}. Nothing was charged.`;
+      : `Rejected ${items.map((p) => `${ref(p)} ${p.vendor}`).join(", ")}. Nothing was charged.${items.filter((p) => a.threads?.some((t) => t.purchaseId === p.id)).map((p) => ` I'll tell ${p.vendor} we're passing; to reopen, text NEGOTIATE ${p.category.toUpperCase()} TO <price>.`).join("")}`;
   };
 
   let m: RegExpMatchArray | null;

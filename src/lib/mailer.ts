@@ -27,7 +27,7 @@ async function transport(c: NonNullable<ReturnType<typeof mailConfig>>): Promise
   const key = `${c.host}:${c.port}:${c.user}:${c.pass.length}`;
   if (g.__mailer?.key === key) return g.__mailer.t;
   const nodemailer = await import("nodemailer");
-  const t = nodemailer.createTransport({ pool: true, maxConnections: 4, maxMessages: 100, host: c.host, port: c.port, secure: c.port === 465, auth: { user: c.user, pass: c.pass } }) as unknown as Transport;
+  const t = nodemailer.createTransport({ pool: true, maxConnections: 3, maxMessages: 100, host: c.host, port: c.port, secure: c.port === 465, auth: { user: c.user, pass: c.pass } }) as unknown as Transport;
   g.__mailer = { key, t };
   return t;
 }
@@ -35,8 +35,21 @@ async function transport(c: NonNullable<ReturnType<typeof mailConfig>>): Promise
 export async function sendEmail(m: Pick<OutboxMessage, "to" | "subject" | "body">, eventTitle: string): Promise<MailResult> {
   const c = mailConfig();
   if (!c) return { ok: false, error: "email not configured" };
-  try {
-    const info = await (await transport(c)).sendMail({
+  const t = await transport(c);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await deliver(t, c, m, eventTitle);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "send failed";
+      if (attempt < 2 && /\b4\d\d\b|ETIMEDOUT|ECONNRESET/.test(msg)) { await new Promise((r) => setTimeout(r, 1500 * (attempt + 1))); continue; }
+      return { ok: false, error: msg.slice(0, 160) };
+    }
+  }
+}
+
+async function deliver(t: Transport, c: NonNullable<ReturnType<typeof mailConfig>>, m: Pick<OutboxMessage, "to" | "subject" | "body">, eventTitle: string): Promise<MailResult> {
+  {
+    const info = await t.sendMail({
       from: c.from,
       to: c.redirect,
       subject: `[EventPilot demo → ${m.to}] ${m.subject}`,
@@ -44,7 +57,5 @@ export async function sendEmail(m: Pick<OutboxMessage, "to" | "subject" | "body"
       headers: { "X-EventPilot-Intended-To": m.to },
     });
     return { ok: true, to: c.redirect, messageId: info.messageId };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message.slice(0, 160) : "send failed" };
   }
 }

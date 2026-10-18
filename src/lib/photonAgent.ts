@@ -483,6 +483,8 @@ function startMailAgent() {
   if (a.mailTimer || !mailConfig()) return;
   a.mailTimer = setInterval(() => void mailTick(), Math.max(5, Number(process.env.VENDOR_POLL_SECONDS || 5)) * 1000);
   setTimeout(() => void mailTick(), 3000);
+  // Finish vendor emails a restart interrupted.
+  if (autonomous() && a.state.plan?.autopilot?.outbox.some(isAutoDraft)) scheduleWebSend();
 }
 
 const followMinutes = () => Math.max(1, Number(process.env.VENDOR_FOLLOWUP_MINUTES || 1440));

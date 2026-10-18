@@ -19,13 +19,24 @@ export function mailConfig() {
 
 export type MailResult = { ok: true; to: string; messageId: string } | { ok: false; error: string };
 
+type Transport = { sendMail: (o: Record<string, unknown>) => Promise<{ messageId: string }> };
+const g = globalThis as unknown as { __mailer?: { key: string; t: Transport } };
+
+/** One pooled SMTP connection set, reused across sends (a new TLS login per email is what made batches slow). */
+async function transport(c: NonNullable<ReturnType<typeof mailConfig>>): Promise<Transport> {
+  const key = `${c.host}:${c.port}:${c.user}:${c.pass.length}`;
+  if (g.__mailer?.key === key) return g.__mailer.t;
+  const nodemailer = await import("nodemailer");
+  const t = nodemailer.createTransport({ pool: true, maxConnections: 4, maxMessages: 100, host: c.host, port: c.port, secure: c.port === 465, auth: { user: c.user, pass: c.pass } }) as unknown as Transport;
+  g.__mailer = { key, t };
+  return t;
+}
+
 export async function sendEmail(m: Pick<OutboxMessage, "to" | "subject" | "body">, eventTitle: string): Promise<MailResult> {
   const c = mailConfig();
   if (!c) return { ok: false, error: "email not configured" };
-  const nodemailer = await import("nodemailer");
-  const t = nodemailer.createTransport({ host: c.host, port: c.port, secure: c.port === 465, auth: { user: c.user, pass: c.pass } });
   try {
-    const info = await t.sendMail({
+    const info = await (await transport(c)).sendMail({
       from: c.from,
       to: c.redirect,
       subject: `[EventPilot demo → ${m.to}] ${m.subject}`,

@@ -183,14 +183,19 @@ export async function handleInbound(text: string, id: string) {
     const mail = mailConfig();
     let q = log(p, "organizer", "text_command", `iMessage: "${t.slice(0, 40)}"`);
     const sent: typeof drafts = [], failed: string[] = [];
-    for (const m of drafts) {
-      if (mail && m.channel === "email") {
-        const r = await sendEmail(m, p.brief.title);
-        if (!r.ok) { failed.push(`${m.to}: ${r.error}`); continue; }
-        q = log(q, "agent", "email_delivered", `${m.subject} → ${r.to} (written for ${m.to})`);
+    const real = mail ? drafts.filter((m) => m.channel === "email").length : 0;
+    if (real > 1) await reply(`Sending ${real} emails now from ${mail!.from}, all to ${mail!.redirect}. Should take about ${Math.max(5, Math.ceil(real / 4) * 2)} seconds.`);
+    a.working = `Sending ${drafts.length} drafts`;
+    try {
+      const results = await Promise.all(drafts.map(async (m) => ({ m, r: mail && m.channel === "email" ? await sendEmail(m, p.brief.title) : null })));
+      for (const { m, r } of results) {
+        if (r && !r.ok) { failed.push(`${m.to}: ${r.error}`); continue; }
+        if (r) q = log(q, "agent", "email_delivered", `${m.subject} → ${r.to} (written for ${m.to})`);
+        q = sendMessage(q, m.id);
+        sent.push(m);
       }
-      q = sendMessage(q, m.id);
-      sent.push(m);
+    } finally {
+      a.working = null;
     }
     setPlan(q);
     const shown = sent.slice(0, 4).map((m) => `${m.subject} → ${m.to}`).join("; ");

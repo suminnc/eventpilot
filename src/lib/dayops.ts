@@ -88,7 +88,7 @@ export function seedDayOps(plan: EventPlan): DayOps {
   const totalSplit = Object.values(split).reduce((s, n) => s + n, 0) || 1;
   const dietary = Object.fromEntries(Object.entries(split).filter(([k]) => !/standard|regular|omni/i.test(k)).map(([k, n]) => [k, Math.round((n / totalSplit) * b.guests)]));
   const contacts = plan.ops?.contacts ?? [];
-  const owner = (re: RegExp, fallback: string) => contacts.find((c) => re.test(c.role))?.owner ?? fallback;
+  const owner = (re: RegExp, fallback: string) => contacts.find((c) => re.test(c.role))?.role ?? fallback;
   const director = owner(/director|lead organizer|event lead|host/i, "Event lead");
   const routing: Record<IncidentCategory, string> = {
     medical: owner(/medic|emt|safety/i, "Safety lead"), security: owner(/secur|safety/i, "Safety lead"), conduct: owner(/safety|conduct/i, "Safety lead"),

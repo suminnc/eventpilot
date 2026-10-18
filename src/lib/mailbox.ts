@@ -23,7 +23,12 @@ export async function fetchReplies(seen: Set<string>): Promise<Inbound[]> {
     try {
       const uids = (await client.search({ from: c.redirect, since: new Date(Date.now() - 2 * 86_400_000) }, { uid: true })) || [];
       if (uids.length) {
-        for await (const m of client.fetch(uids.slice(-40), { envelope: true, source: true }, { uid: true })) {
+        const fresh: number[] = [];
+        for await (const m of client.fetch(uids.slice(-40), { envelope: true }, { uid: true })) {
+          const id = m.envelope?.messageId;
+          if (id && !seen.has(id)) fresh.push(m.uid);
+        }
+        if (fresh.length) for await (const m of client.fetch(fresh, { envelope: true, source: true }, { uid: true })) {
           const id = m.envelope?.messageId;
           if (!id || seen.has(id) || !m.source) continue;
           const p = await simpleParser(m.source);

@@ -281,7 +281,7 @@ export function mailStatus() {
 function startMailAgent() {
   const a = agent();
   if (a.mailTimer || !mailConfig()) return;
-  a.mailTimer = setInterval(() => void mailTick(), Math.max(10, Number(process.env.VENDOR_POLL_SECONDS || 20)) * 1000);
+  a.mailTimer = setInterval(() => void mailTick(), Math.max(5, Number(process.env.VENDOR_POLL_SECONDS || 5)) * 1000);
   setTimeout(() => void mailTick(), 3000);
 }
 

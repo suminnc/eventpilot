@@ -330,8 +330,7 @@ async function applyEffects(fx: Effects, key: string) {
     setPlan({ ...next, autopilot: { ...next.autopilot!, audit: appendAudit(ap.audit, "negotiator", r.ok ? "email_delivered" : "email_failed", `Re: ${t.subject} → ${r.ok ? r.to : r.error} (for ${t.to})`) } });
   }
   for (const id of fx.send ?? []) await deliverDraft(id);
-  let i = 0;
-  for (const s of fx.texts) await say(s, `${key}-${i++}`);
+  if (fx.texts.length) await say(fx.texts.join("\n\n"), key);
   scheduleNotify();
 }
 

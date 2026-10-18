@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
-import { Check, CreditCard, Loader2, Lock, Mail, MessageSquare, Play, Receipt, RotateCcw, Search, ShieldCheck, ShieldX, Star, X } from "lucide-react";
+import { Check, CreditCard, Loader2, Lock, Mail, Play, Receipt, RotateCcw, Search, ShieldCheck, ShieldX, Star, X } from "lucide-react";
 import type { EventPlan, SpendMandate, VendorThread } from "@/lib/types";
 import { OrganizerTexts } from "./OrganizerTexts";
 import { committed, decide, defaultMandate, emptyAutopilot, isAutoDraft, negotiatedSavings, planSteps, refund, sendMessage, switchQuote, verifyAudit } from "@/lib/autopilot";
@@ -177,32 +177,6 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
                 ))}
               </section>
             ) : null}
-            <section>
-              <h3 className="section-head"><Mail size={14} /> Outbox</h3>
-              {a.outbox.map((m) => (
-                <details key={m.id} className="group border-b border-line py-3 text-sm">
-                  <summary className="flex cursor-pointer list-none items-center gap-2">
-                    {m.channel === "sms" ? <MessageSquare size={13} className="shrink-0 text-muted" /> : <Mail size={13} className="shrink-0 text-muted" />}
-                    <span className="min-w-0 flex-1 truncate text-foreground">{m.subject}</span>
-                    {m.status === "sent" ? (
-                      <span className="flex items-center gap-1 text-xs font-medium text-success"><Check size={12} /> Sent</span>
-                    ) : (
-                      <button disabled={running} className="shrink-0 rounded-lg border border-line px-2 py-0.5 text-xs font-medium text-foreground hover:bg-surface disabled:opacity-40" onClick={async (e) => {
-                        e.preventDefault();
-                        if (m.channel === "email") {
-                          const r = await fetch("/api/email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ planId: plan.id, outboxId: m.id, to: m.to, subject: m.subject, body: m.body, title: plan.brief.title }) }).then((x) => x.json()).catch(() => ({ ok: false, error: "network error" }));
-                          if (!r.simulated && !r.ok) { window.alert(`Email not sent: ${r.error}`); return; }
-                          if (r.plan) { onChange(r.plan); return; }
-                        }
-                        onChange(sendMessage(plan, m.id));
-                      }}>Approve & send</button>
-                    )}
-                  </summary>
-                  <div className="mt-2 text-xs text-subtle">To: {m.to}</div>
-                  <pre className="mt-1 whitespace-pre-wrap font-sans text-xs leading-relaxed text-muted">{m.body}</pre>
-                </details>
-              ))}
-            </section>
           </div>
 
           <section>

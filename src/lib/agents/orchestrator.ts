@@ -156,27 +156,9 @@ async function budgetAgent(ctx: Ctx, brief: EventBrief, venue: Venue | undefined
       return out;
     }, (r) => r.map((l) => `${l.category} ${money(l.amount)}`).join(", "));
     if (venueCost > brief.budget * 0.5) think(ctx, "budget", `Venue eats ${Math.round((venueCost / brief.budget) * 100)}% of budget — flagging for Critic.`);
-    return withLLM(ctx, "budget", () => lines, async (llm) => {
-      const out = await chatJSON<{ lines: BudgetLine[] }>(
-        llm,
-        `You are the Budget Analyst agent. Improve this allocation for the event: keep total exactly equal to the budget, keep Venue and Contingency lines, rename/rebalance other categories to suit the event, and add a short practical note to each line. Return {"lines":[{"category","amount","note"}]}.`,
-        `Brief: ${briefJSON(brief)}${fb(ctx)}\nDraft: ${JSON.stringify(lines)}`,
-        { temperature: 0.3 },
-      );
-      return normalizeBudget(out.lines, brief.budget) || lines;
-    });
+    think(ctx, "budget", "Budget math stays deterministic so totals always reconcile to the dollar.");
+    return lines;
   }, (l) => `${l.length} line items · per-guest ≈ ${money(brief.budget / brief.guests)}`);
-}
-
-function normalizeBudget(lines: BudgetLine[] | undefined, total: number) {
-  if (!Array.isArray(lines) || !lines.length) return null;
-  const clean = lines.map((l) => ({ category: String(l.category), amount: Math.max(0, Number(l.amount) || 0), note: String(l.note ?? "") }));
-  const sum = clean.reduce((s, l) => s + l.amount, 0);
-  if (!sum) return null;
-  const scaled = clean.map((l) => ({ ...l, amount: Math.round((l.amount / sum) * total) }));
-  const drift = total - scaled.reduce((s, l) => s + l.amount, 0);
-  scaled[scaled.length - 1].amount += drift;
-  return scaled;
 }
 
 // ---------------------------------------------------------------- Scheduler
@@ -344,12 +326,14 @@ async function critic(ctx: Ctx, plan: Omit<EventPlan, "risks" | "score" | "summa
     return withLLM(ctx, "critic", () => offline, async (llm) => {
       const out = await chatJSON<{ risks: Risk[]; summary: string }>(
         llm,
-        `You are the Critic agent. Review the event plan, keep the detected risks and add up to 3 non-obvious ones (level high|medium|low, issue, mitigation). Also write a confident 2-3 sentence executive summary. Return {"risks":[...],"summary":"..."}.`,
+        `You are the Critic agent. Review the event plan, keep the detected risks and add up to 2 non-obvious ones. Be concise. Note: multi-day venues are billed at a day rate (~12 billable hours/day); that is intentional, not an error. Do not re-flag detected risks (level high|medium|low, issue, mitigation). Also write a confident 2-3 sentence executive summary. Return {"risks":[...],"summary":"..."}.`,
         `Plan: ${JSON.stringify({ brief, venue, budget, weather, schedule: plan.schedule })}${fb(ctx)}\nDetected risks: ${JSON.stringify(risks)}`,
         { temperature: 0.4 },
       );
-      const r = Array.isArray(out.risks) && out.risks.length ? out.risks.filter((x) => x.issue) : risks;
-      return { risks: r, score: Math.max(35, 100 - r.reduce((s, x) => s + (x.level === "high" ? 18 : x.level === "medium" ? 9 : 3), 0)), summary: out.summary || offline.summary };
+      const extra = (Array.isArray(out.risks) ? out.risks : []).filter((x) => x.issue && !risks.some((r) => r.issue === x.issue)).slice(0, 2);
+      // Rule-detected risks drive the score; model-suggested ones count at half weight.
+      const penalty = extra.reduce((s, x) => s + (x.level === "high" ? 9 : x.level === "medium" ? 4 : 1), 0);
+      return { risks: [...risks, ...extra], score: Math.max(35, score - penalty), summary: out.summary || offline.summary };
     });
   }, (r) => `Plan confidence ${r.score}/100 · ${r.risks.filter((x) => x.level === "high").length} high-priority risks`);
 }
@@ -395,5 +379,6 @@ export async function runPlanner(req: PlanRequest, emit: Emit): Promise<EventPla
     model: llm?.model ?? "offline-heuristics",
   };
   const review = await critic(ctx, draft);
-  return { ...draft, ...review };
+  if (llm) think(ctx, "coordinator", `Done: ${llm.usage.calls} model calls, ${llm.usage.promptTokens.toLocaleString()} input + ${llm.usage.completionTokens.toLocaleString()} output tokens.`);
+  return { ...draft, ...review, usage: llm ? { ...llm.usage } : undefined };
 }

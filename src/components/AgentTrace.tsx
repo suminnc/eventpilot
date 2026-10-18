@@ -14,7 +14,7 @@ export function AgentRoster({ events, running }: { events: AgentEvent[]; running
   }, [events]);
   return (
     <div className="grid grid-cols-7 gap-1.5">
-      {(Object.keys(AGENTS) as AgentId[]).map((id) => {
+      {(Object.keys(AGENTS) as AgentId[]).filter((id) => id !== "payments").map((id) => {
         const a = AGENTS[id];
         const st = status[id];
         return (

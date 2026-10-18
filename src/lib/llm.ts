@@ -2,15 +2,26 @@
  * Minimal OpenAI-compatible chat client. Works with StepFun (step-5-preview),
  * Gemini's OpenAI endpoint, OpenAI, Groq, local Ollama, etc.
  */
-export type LLMConfig = { baseUrl: string; apiKey: string; model: string };
+export type LLMConfig = {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  maxTokens: number;
+  reasoningEffort: string;
+  usage: { calls: number; promptTokens: number; completionTokens: number };
+};
 
 export function getLLMConfig(): LLMConfig | null {
   const apiKey = process.env.LLM_API_KEY;
   if (!apiKey) return null;
   return {
     apiKey,
-    baseUrl: (process.env.LLM_BASE_URL || "https://api.stepfun.com/v1").replace(/\/$/, ""),
+    baseUrl: (process.env.LLM_BASE_URL || "https://api.stepfun.ai/v1").replace(/\/$/, ""),
     model: process.env.LLM_MODEL || "step-5-preview",
+    maxTokens: Number(process.env.LLM_MAX_TOKENS) || 4000,
+    // Reasoning tokens count toward output; "low" cuts them ~3x on step-5-preview. Set "" to omit.
+    reasoningEffort: process.env.LLM_REASONING_EFFORT ?? "low",
+    usage: { calls: 0, promptTokens: 0, completionTokens: 0 },
   };
 }
 
@@ -18,7 +29,7 @@ export async function chatJSON<T>(
   cfg: LLMConfig,
   system: string,
   user: string,
-  { temperature = 0.6, timeoutMs = 45000 }: { temperature?: number; timeoutMs?: number } = {},
+  { temperature = 0.6, timeoutMs = 90000 }: { temperature?: number; timeoutMs?: number } = {},
 ): Promise<T> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -30,6 +41,8 @@ export async function chatJSON<T>(
       body: JSON.stringify({
         model: cfg.model,
         temperature,
+        max_tokens: cfg.maxTokens,
+        ...(cfg.reasoningEffort ? { reasoning_effort: cfg.reasoningEffort } : {}),
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: `${system}\nRespond with a single valid JSON object only.` },
@@ -39,6 +52,10 @@ export async function chatJSON<T>(
     });
     if (!res.ok) throw new Error(`LLM ${res.status}: ${(await res.text()).slice(0, 300)}`);
     const data = await res.json();
+    cfg.usage.calls += 1;
+    cfg.usage.promptTokens += data.usage?.prompt_tokens ?? 0;
+    cfg.usage.completionTokens += data.usage?.completion_tokens ?? 0;
+    if (data.choices?.[0]?.finish_reason === "length") throw new Error("hit max_tokens");
     const content: string = data.choices?.[0]?.message?.content ?? "";
     return parseJSONLoose<T>(content);
   } finally {

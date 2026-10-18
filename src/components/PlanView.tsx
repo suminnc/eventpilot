@@ -6,9 +6,10 @@ import {
 import type { EventPlan } from "@/lib/types";
 import { AGENTS } from "@/lib/types";
 import { planToICS, planToMarkdown } from "@/lib/export";
+import { AutopilotPanel } from "./AutopilotPanel";
 
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
-const TABS = ["Overview", "Schedule", "Budget", "Venues", "Tasks", "Invite"] as const;
+const TABS = ["Overview", "Schedule", "Budget", "Venues", "Tasks", "Invite", "Autopilot"] as const;
 type Tab = (typeof TABS)[number];
 const COLORS = ["#a78bfa", "#38bdf8", "#34d399", "#fbbf24", "#fb923c", "#f472b6", "#f87171", "#94a3b8", "#22d3ee", "#c084fc"];
 
@@ -53,6 +54,7 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
             <button key={t} onClick={() => setTab(t)} className={`rounded-lg px-3 py-1.5 text-sm transition ${tab === t ? "bg-white/10 text-white" : "text-white/50 hover:text-white/80"}`}>
               {t}
               {t === "Tasks" && <span className="ml-1 text-white/40">{done}/{plan.tasks.length}</span>}
+              {t === "Autopilot" && <span className="ml-1.5 rounded bg-cyan-500/20 px-1 text-[10px] text-cyan-200">{plan.autopilot?.purchases.some((p) => p.status === "pending") ? "approve" : "new"}</span>}
             </button>
           ))}
         </div>
@@ -169,6 +171,8 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
             ))}
           </div>
         )}
+
+        {tab === "Autopilot" && <AutopilotPanel plan={plan} onChange={onChange} />}
 
         {tab === "Invite" && (
           <div className="grid gap-4 md:grid-cols-[2fr_1fr]">

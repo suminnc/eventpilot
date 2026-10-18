@@ -17,6 +17,7 @@ You describe an event in plain English. A **Coordinator** agent turns that into 
 Order of work: the Coordinator runs first. Scout and Weather run in parallel, then Budget and Scheduler, then Logistics and Comms, and the Critic runs last. Every agent has an **LLM path** and a **deterministic offline path**, so the demo still works without a key or Wi-Fi to an LLM provider. Only the weather tool needs internet.
 
 Other features:
+- **Autopilot**: agents carry out the plan. They draft venue holds, vendor RFQs and the invite, and request deposits through a **Payments agent** that works under a spend mandate with step-up approval, single-use virtual cards (simulated), idempotency keys, and a hash-chained audit log.
 - Refine a plan in follow-up chat, e.g. "make it 20% cheaper" or "add 500 more hackers".
 - Pick an alternate venue, check off tasks, and copy the invite or SMS.
 - Export the plan to **.ics** (the event plus prep-task deadlines) or **Markdown**.
@@ -47,11 +48,8 @@ cd agents/fetch && pip install -r requirements.txt
 EVENTPILOT_URL=https://<deploy>/api/agent AGENT_SEED="<secret>" python eventpilot_agent.py
 ```
 
-## Track fit
-- **Applied Intelligence**: real event-ops automation for student organizers.
-- **Fetch.ai ASI:One Agent Challenge**: a uAgent with the chat protocol that turns intent into a full plan.
-- **StepFun**: `step-5-preview` is the default reasoning model.
-- **Paper (Best Designed Hack)** and **Best Use of Devin**.
+## Prize tracks
+Target tracks: Creao, Visa, Workday, Paper, and Cognition/Devin. The write-up for each is in [SUBMISSION.md](SUBMISSION.md). It also fits Applied Intelligence, the Fetch.ai ASI:One challenge, and StepFun.
 
 ## Stack
 Next.js 15 (App Router) · React 19 · Tailwind v4 · TypeScript · lucide-react. Venue rates are planning estimates, not quotes.

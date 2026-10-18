@@ -86,6 +86,47 @@ export type EventPlan = {
   score: number; // critic confidence 0-100
   mode: "llm" | "offline";
   model: string;
+  usage?: { calls: number; promptTokens: number; completionTokens: number };
+  autopilot?: Autopilot;
+};
+
+export type SpendMandate = {
+  totalCap: number;
+  perPurchaseCap: number;
+  approvalThreshold: number;
+  allowedCategories: string[];
+};
+
+export type Purchase = {
+  id: string;
+  idempotencyKey: string;
+  vendor: string;
+  category: string;
+  purpose: string;
+  amount: number;
+  status: "auto_approved" | "pending" | "approved" | "rejected" | "blocked";
+  reason: string;
+  card?: string; // masked single-use virtual card (simulated)
+  ts: number;
+};
+
+export type OutboxMessage = {
+  id: string;
+  channel: "email" | "sms";
+  to: string;
+  subject: string;
+  body: string;
+  status: "draft" | "sent";
+  taskId?: string;
+};
+
+export type AuditEntry = { ts: number; actor: string; action: string; detail: string; prev: string; hash: string };
+
+export type Autopilot = {
+  mandate: SpendMandate;
+  purchases: Purchase[];
+  outbox: OutboxMessage[];
+  audit: AuditEntry[];
 };
 
 export type AgentId =
@@ -95,7 +136,8 @@ export type AgentId =
   | "scheduler"
   | "logistics"
   | "comms"
-  | "critic";
+  | "critic"
+  | "payments";
 
 export type AgentEvent =
   | { type: "agent_start"; agent: AgentId; message: string; ts: number }
@@ -114,4 +156,5 @@ export const AGENTS: Record<AgentId, { name: string; role: string; color: string
   logistics: { name: "Logistics", role: "Vendors, weather, tasks", color: "#fb923c" },
   comms: { name: "Comms", role: "Invites & reminders", color: "#f472b6" },
   critic: { name: "Critic", role: "Stress-tests the plan", color: "#f87171" },
+  payments: { name: "Payments", role: "Guarded agentic checkout", color: "#22d3ee" },
 };

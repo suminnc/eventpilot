@@ -165,14 +165,14 @@ export function OrganizerTexts({ plan, onChange, running }: { plan: EventPlan; o
   const chips = [...pending.slice(0, 2).map((p) => `YES ${refNum(p)}`), ...(pending.length > 1 ? ["ALL YES"] : []), "STATUS", "What's the biggest risk?"];
 
   return (
-    <section className="rounded-xl border border-white/10 bg-black/20 p-4">
+    <section className="rounded-2xl border border-line p-5">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="flex items-center gap-2 text-sm font-medium text-white/80"><MessageCircle size={14} className="text-accent" /> Organizer texts</h3>
-        <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${via === "photon" ? "bg-accent/15 text-accent-soft" : "bg-white/10 text-white/50"}`}>
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground"><MessageCircle size={14} className="text-accent" /> Organizer texts</h3>
+        <span className={`rounded-lg px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${via === "photon" ? "bg-accent-soft text-accent" : "bg-surface text-muted"}`}>
           {via === "photon" ? `Photon · ${live?.platform}` : "Simulated"}
         </span>
       </div>
-      <p className="mt-1 text-xs text-white/50">
+      <p className="mt-1 text-xs text-muted">
         {live === null
           ? "Checking messaging…"
           : !live.configured
@@ -183,22 +183,22 @@ export function OrganizerTexts({ plan, onChange, running }: { plan: EventPlan; o
                 ? `Decisions are texted to ${live.organizer} through Photon. Reply from your phone.`
                 : `Text "hi" to ${live.agent} from ${live.organizer} once so EventPilot can reach you.`}
       </p>
-      <div className="scrollbar-thin mt-3 flex max-h-72 flex-col gap-2 overflow-y-auto rounded-lg bg-black/30 p-3" aria-live="polite">
-        {texts.length === 0 && <p className="text-xs text-white/35">No texts yet. Anything over your approval line will show up here as a text.</p>}
+      <div className="scrollbar-thin mt-3 flex max-h-72 flex-col gap-2 overflow-y-auto rounded-xl bg-surface p-3" aria-live="polite">
+        {texts.length === 0 && <p className="text-xs text-subtle">No texts yet. Anything over your approval line will show up here as a text.</p>}
         {texts.map((t) => (
-          <div key={t.id} className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-xs leading-relaxed ${t.dir === "out" ? "self-start rounded-bl-sm bg-white/[0.07] text-white/85" : "self-end rounded-br-sm bg-accent text-black"}`}>
+          <div key={t.id} className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-xs leading-relaxed ${t.dir === "out" ? "self-start rounded-bl-sm border border-line bg-background text-foreground" : "self-end rounded-br-sm bg-accent text-white"}`}>
             {t.body}
-            {t.queued && <div className="mt-1 text-[10px] text-white/40">Waiting to send…</div>}
+            {t.queued && <div className="mt-1 text-[10px] opacity-60">Waiting to send…</div>}
           </div>
         ))}
-        {thinking && <div className="self-start rounded-2xl rounded-bl-sm bg-white/[0.07] px-3 py-2 text-xs text-white/50">EventPilot is typing…</div>}
+        {thinking && <div className="self-start rounded-2xl rounded-bl-sm border border-line bg-background px-3 py-2 text-xs text-muted">EventPilot is typing…</div>}
         <div ref={end} />
       </div>
       {live && !live.configured && (
         <>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {chips.map((c) => (
-              <button key={c} disabled={running || thinking} onClick={() => void reply(c)} className="rounded-full border border-white/10 px-2.5 py-1 font-mono text-[11px] text-white/70 hover:border-accent/50 hover:text-white disabled:opacity-40">
+              <button key={c} disabled={running || thinking} onClick={() => void reply(c)} className="rounded-full border border-line bg-background px-2.5 py-1 font-mono text-[11px] text-muted hover:border-accent hover:text-accent disabled:opacity-40">
                 {c}
               </button>
             ))}

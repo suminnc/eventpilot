@@ -7,13 +7,13 @@ import { committed, decide, defaultMandate, emptyAutopilot, planSteps, refund, s
 
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 const STATUS: Record<string, string> = {
-  auto_approved: "bg-emerald-500/15 text-emerald-200",
-  approved: "bg-emerald-500/15 text-emerald-200",
-  pending: "bg-amber-500/20 text-amber-200",
-  rejected: "bg-white/10 text-white/50",
-  canceled: "bg-white/10 text-white/50",
-  refunded: "bg-sky-500/15 text-sky-200",
-  blocked: "bg-red-500/20 text-red-200",
+  auto_approved: "bg-success-soft text-success",
+  approved: "bg-success-soft text-success",
+  pending: "bg-warning-soft text-warning",
+  rejected: "bg-surface text-muted",
+  canceled: "bg-surface text-muted",
+  refunded: "bg-accent-soft text-accent",
+  blocked: "bg-danger-soft text-danger",
 };
 
 export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: (p: EventPlan) => void }) {
@@ -41,18 +41,20 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
   const intact = a ? verifyAudit(a.audit) : true;
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 [overflow-wrap:anywhere]">
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 rounded-xl border border-white/10 bg-white/[0.02] p-4 md:grid-cols-[minmax(0,1fr)_auto]">
-        <div>
-          <h3 className="flex items-center gap-2 font-medium"><ShieldCheck size={16} className="text-accent" /> Spend mandate</h3>
-          <p className="mt-1 max-w-2xl text-sm text-white/55">Your agents shop, compare and pay only inside these limits. Anything over the approval line waits for you. Each payment gets its own single-use card, and every action is written to a tamper-evident log.</p>
-          <div className="mt-3 grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-3">
+    <div className="flex min-w-0 flex-col gap-8 [overflow-wrap:anywhere]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-8 rounded-2xl border border-line p-5 md:grid-cols-[minmax(0,1fr)_200px]">
+        <div className="flex flex-col gap-4">
+          <div>
+            <h3 className="flex items-center gap-2 text-base font-semibold text-foreground"><ShieldCheck size={16} className="text-accent" /> Spend mandate</h3>
+            <p className="mt-1.5 max-w-2xl text-sm leading-[21px] text-muted">Your agents shop, compare and pay only inside these limits. Anything over the approval line waits for you. Each payment gets its own single-use card, and every action is written to a tamper-evident log.</p>
+          </div>
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-3">
             <Num label="Total cap" value={mandate.totalCap} onChange={(v) => setMandate({ ...mandate, totalCap: v })} disabled={running} />
             <Num label="Per-purchase cap" value={mandate.perPurchaseCap} onChange={(v) => setMandate({ ...mandate, perPurchaseCap: v })} disabled={running} />
             <Num label="Ask me above" value={mandate.approvalThreshold} onChange={(v) => setMandate({ ...mandate, approvalThreshold: v })} disabled={running} />
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            <span className="mr-1 text-xs text-white/40">Allowed:</span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="mr-1 text-xs font-medium text-muted">Allowed:</span>
             {Array.from(new Set([...defaultMandate(plan).allowedCategories, "Alcohol", "Gift cards"])).map((c) => {
               const on = mandate.allowedCategories.includes(c);
               return (
@@ -61,7 +63,7 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
                   disabled={running}
                   aria-pressed={on}
                   onClick={() => setMandate({ ...mandate, allowedCategories: on ? mandate.allowedCategories.filter((x) => x !== c) : [...mandate.allowedCategories, c] })}
-                  className={`rounded-full border px-2.5 py-1 text-xs transition ${on ? "border-accent/50 bg-accent/10 text-accent-soft" : "border-white/10 text-white/40 line-through"}`}
+                  className={`rounded-lg border px-2.5 py-[3px] text-xs transition ${on ? "border-accent bg-accent-soft font-medium text-accent" : "border-line text-subtle line-through hover:text-muted"}`}
                 >
                   {c}
                 </button>
@@ -69,43 +71,44 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
             })}
           </div>
         </div>
-        <div className="flex flex-col items-stretch justify-end gap-2 md:w-56">
+        <div className="flex flex-col items-stretch justify-end gap-2.5">
           {a && (
-            <div className="text-right text-sm">
-              <div className="font-mono text-lg">{money(spent)}</div>
-              <div className="text-xs text-white/40">committed of {money(a.mandate.totalCap)}</div>
-              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full bg-accent transition-all" style={{ width: `${Math.min(100, (spent / Math.max(1, a.mandate.totalCap)) * 100)}%` }} /></div>
+            <div className="text-right">
+              <div className="font-mono text-[22px] font-medium leading-7 text-foreground">{money(spent)}</div>
+              <div className="text-xs text-muted">committed of {money(a.mandate.totalCap)}</div>
+              <div className="mt-1.5 h-1 overflow-hidden bg-line"><div className="h-full bg-accent transition-all" style={{ width: `${Math.min(100, (spent / Math.max(1, a.mandate.totalCap)) * 100)}%` }} /></div>
             </div>
           )}
-          <button className="btn-primary" onClick={run} disabled={running}>
-            {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} {a ? "Re-run Autopilot" : "Run Autopilot"}
+          <button className="btn-primary py-2.5" onClick={run} disabled={running}>
+            {running ? <Loader2 size={14} className="animate-spin" /> : a ? <RotateCcw size={14} /> : <Play size={14} />} {a ? "Re-run Autopilot" : "Run Autopilot"}
           </button>
-          <p className="text-center text-[11px] text-white/35">Demo: payments and messages are simulated</p>
+          <p className="text-center text-[11px] text-subtle">Demo: payments and messages are simulated</p>
         </div>
       </div>
 
       {feed.length > 0 && (
-        <div className="scrollbar-thin max-h-40 overflow-y-auto rounded-xl border border-white/10 bg-black/30 p-3 font-mono text-xs text-white/60" aria-live="polite">
+        <div className="scrollbar-thin max-h-40 overflow-y-auto rounded-xl border border-line bg-surface p-3 font-mono text-xs text-muted" aria-live="polite">
           {feed.map((f, i) => <div key={i} className="fade-up">› {f}</div>)}
-          {running && <div className="text-white/30">…</div>}
+          {running && <div className="text-subtle">…</div>}
         </div>
       )}
 
       {a && (
         <>
           {pending.length > 0 && (
-            <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-4">
-              <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-amber-100"><Lock size={14} /> {pending.length} {pending.length > 1 ? "purchases need" : "purchase needs"} your approval</h3>
-              <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
-                {pending.map((p) => (
-                  <div key={p.id} className="flex flex-wrap items-center gap-3 rounded-lg bg-black/30 p-3 text-sm">
-                    <span className="flex-1">{p.purpose} · <span className="text-white/60">{p.vendor}</span></span>
-                    <span className="shrink-0 whitespace-nowrap font-mono">{money(p.amount)}</span>
-                    <button disabled={running} className="btn bg-emerald-500/20 px-3 py-1 text-emerald-100 hover:bg-emerald-500/30" onClick={() => onChange(decide(plan, p.id, true))}><Check size={13} /> Approve</button>
-                    <button disabled={running} className="btn bg-white/5 px-3 py-1 text-white/60 hover:bg-white/10" onClick={() => onChange(decide(plan, p.id, false))}><X size={13} /> Reject</button>
+            <div className="overflow-hidden rounded-2xl border border-[#e9c995] bg-warning-soft">
+              <h3 className="flex items-center gap-2 px-4 py-3.5 text-sm font-semibold text-[#7c3a06]"><Lock size={14} className="text-warning" /> {pending.length} {pending.length > 1 ? "purchases need" : "purchase needs"} your approval</h3>
+              {pending.map((p) => (
+                <div key={p.id} className="flex flex-wrap items-center gap-4 border-t border-[#f0ddbb] bg-background px-4 py-3 text-sm">
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <span className="font-medium text-foreground">{p.purpose}</span>
+                    <span className="text-[13px] text-muted">{p.vendor}</span>
                   </div>
-                ))}
-              </div>
+                  <span className="shrink-0 whitespace-nowrap text-right font-mono text-[15px] font-medium text-foreground sm:w-24">{money(p.amount)}</span>
+                  <button disabled={running} className="btn bg-accent px-3 py-[7px] text-[13px] font-semibold text-white hover:brightness-110" onClick={() => onChange(decide(plan, p.id, true))}><Check size={13} strokeWidth={2.4} /> Approve</button>
+                  <button disabled={running} className="btn border border-line px-3 py-[7px] text-[13px] text-muted hover:bg-surface hover:text-foreground" onClick={() => onChange(decide(plan, p.id, false))}><X size={13} strokeWidth={2.4} /> Reject</button>
+                </div>
+              ))}
             </div>
           )}
 
@@ -113,118 +116,112 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
 
           {(a.shortlists?.length ?? 0) > 0 && (
             <section>
-              <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-white/70"><Search size={14} /> What the agent compared</h3>
-              <div className="grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-3">
+              <h3 className="section-head"><Search size={14} /> What the agent compared</h3>
+              <div className="grid grid-cols-[minmax(0,1fr)] gap-6 pt-4 lg:grid-cols-3">
                 {a.shortlists!.map((sl) => (
-                  <div key={sl.category} className="rounded-xl border border-white/10 bg-black/20 p-3">
-                    <div className="mb-2 flex items-baseline justify-between">
-                      <span className="font-medium">{sl.category}</span>
-                      <span className="text-xs text-white/40">target {money(sl.target)}</span>
+                  <div key={sl.category} className="flex min-w-0 flex-col gap-2">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[15px] font-semibold text-foreground">{sl.category}</span>
+                      <span className="font-mono text-xs text-subtle">target {money(sl.target)}</span>
                     </div>
-                    <div className="grid grid-cols-[minmax(0,1fr)] gap-1.5">
-                      {sl.quotes.map((q, i) => (
-                        <div key={q.vendor} className={`rounded-lg border p-2 text-xs ${i === sl.pick ? "border-accent/50 bg-accent/10" : "border-white/5"}`}>
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="min-w-0 truncate font-medium text-white/90">{q.vendor}</span>
-                            <span className="shrink-0 whitespace-nowrap font-mono">{money(q.price)}</span>
-                          </div>
-                          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-white/45">
-                            <span className="flex items-center gap-0.5"><Star size={10} className="fill-current" />{q.rating}</span>
-                            <span>{q.leadDays}d lead</span>
-                            <span>{q.cancellable ? "free cancel" : "non-refundable"}</span>
-                          </div>
-                          {q.note && <div className="mt-0.5 text-white/55">{q.note}</div>}
-                          <div className="mt-1">
-                            {i === sl.pick ? (
-                              <span className="text-[10px] font-semibold uppercase tracking-wider text-accent">Agent pick</span>
-                            ) : (
-                              <button disabled={running} onClick={() => onChange(switchQuote(plan, sl.category, i))} className="text-[11px] text-white/60 underline-offset-2 hover:text-white hover:underline disabled:opacity-40">
-                                Choose this instead
-                              </button>
-                            )}
-                          </div>
+                    {sl.quotes.map((q, i) => (
+                      <div key={q.vendor} className={`flex flex-col gap-0.5 rounded-xl px-3 py-2.5 text-xs ${i === sl.pick ? "border-[1.5px] border-accent bg-accent-soft" : "border border-line"}`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`min-w-0 truncate text-[13px] text-foreground ${i === sl.pick ? "font-semibold" : "font-medium"}`}>{q.vendor}</span>
+                          <span className={`shrink-0 whitespace-nowrap font-mono text-[13px] text-foreground ${i === sl.pick ? "font-semibold" : ""}`}>{money(q.price)}</span>
                         </div>
-                      ))}
-                    </div>
-                    <p className="mt-2 text-xs leading-relaxed text-white/55">{sl.why}</p>
+                        <div className="flex flex-wrap items-center gap-x-1.5 text-muted">
+                          <span className="flex items-center gap-0.5"><Star size={10} className="fill-current" />{q.rating}</span>
+                          <span>· {q.leadDays}d lead</span>
+                          <span>· {q.cancellable ? "free cancel" : "non-refundable"}</span>
+                        </div>
+                        {q.note && <div className="text-muted">{q.note}</div>}
+                        <div className="pt-1">
+                          {i === sl.pick ? (
+                            <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-accent">Agent pick</span>
+                          ) : (
+                            <button disabled={running} onClick={() => onChange(switchQuote(plan, sl.category, i))} className="text-xs font-medium text-accent underline-offset-2 hover:underline disabled:opacity-40">
+                              Choose this instead
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    <p className="text-xs leading-[18px] text-muted">{sl.why}</p>
                   </div>
                 ))}
               </div>
             </section>
           )}
 
-          <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-2">
             <section>
-              <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-white/70"><CreditCard size={14} /> Payments</h3>
-              <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
-                {a.purchases.map((p) => (
-                  <div key={p.id} className={`rounded-lg border border-white/10 bg-black/20 p-3 text-sm ${p.status === "refunded" || p.status === "canceled" ? "opacity-60" : ""}`}>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="min-w-0 font-medium">{p.purpose}</span>
-                      <span className={`shrink-0 whitespace-nowrap font-mono ${p.status === "refunded" || p.status === "canceled" ? "line-through" : ""}`}>{money(p.amount)}</span>
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
-                      <span className={`rounded px-1.5 py-0.5 font-semibold uppercase ${STATUS[p.status]}`}>{p.status.replace("_", " ")}</span>
-                      <span className="text-white/50">{p.reason}</span>
-                    </div>
-                    <div className="mt-1 text-[11px] text-white/40">{p.vendor}</div>
-                    {p.card && (
-                      <details className="mt-2 rounded-md bg-white/[0.03] px-2 py-1.5 text-[11px] text-white/55">
-                        <summary className="flex cursor-pointer list-none items-center gap-1.5"><Receipt size={11} /> Receipt · {p.card}</summary>
-                        <dl className="mt-1.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 font-mono">
-                          <dt className="text-white/35">merchant</dt><dd>{p.vendor}</dd>
-                          <dt className="text-white/35">amount</dt><dd>{money(p.amount)}</dd>
-                          <dt className="text-white/35">card</dt><dd>{p.card} (single-use, locked to merchant)</dd>
-                          <dt className="text-white/35">idempotency</dt><dd>{p.idempotencyKey}</dd>
-                          <dt className="text-white/35">time</dt><dd>{new Date(p.ts).toLocaleString()}</dd>
-                          {p.why && (<><dt className="text-white/35">why</dt><dd className="font-sans">{p.why}</dd></>)}
-                        </dl>
-                        {(p.status === "approved" || p.status === "auto_approved") && (
-                          <button disabled={running} onClick={() => onChange(refund(plan, p.id))} className="mt-2 flex items-center gap-1 rounded-md bg-white/10 px-2 py-0.5 hover:bg-white/20 disabled:opacity-40">
-                            <RotateCcw size={11} /> Refund to card
-                          </button>
-                        )}
-                      </details>
-                    )}
+              <h3 className="section-head"><CreditCard size={14} /> Payments</h3>
+              {a.purchases.map((p) => (
+                <div key={p.id} className={`border-b border-line py-3 text-sm ${p.status === "refunded" || p.status === "canceled" ? "opacity-60" : ""}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 font-medium text-foreground">{p.purpose}</span>
+                    <span className={`shrink-0 whitespace-nowrap font-mono text-foreground ${p.status === "refunded" || p.status === "canceled" ? "line-through" : ""}`}>{money(p.amount)}</span>
                   </div>
-                ))}
-              </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                    <span className={`rounded-lg px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.04em] ${STATUS[p.status]}`}>{p.status.replace("_", " ")}</span>
+                    <span className="text-muted">{p.reason}</span>
+                  </div>
+                  <div className="mt-1 text-xs text-subtle">{p.vendor}</div>
+                  {p.card && (
+                    <details className="mt-2 rounded-lg bg-surface px-2.5 py-2 text-[11px] text-muted">
+                      <summary className="flex cursor-pointer list-none items-center gap-1.5 text-foreground"><Receipt size={11} /> Receipt · {p.card}</summary>
+                      <dl className="mt-1.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 font-mono">
+                        <dt className="text-subtle">merchant</dt><dd>{p.vendor}</dd>
+                        <dt className="text-subtle">amount</dt><dd>{money(p.amount)}</dd>
+                        <dt className="text-subtle">card</dt><dd>{p.card} (single-use, locked to merchant)</dd>
+                        <dt className="text-subtle">idempotency</dt><dd>{p.idempotencyKey}</dd>
+                        <dt className="text-subtle">time</dt><dd>{new Date(p.ts).toLocaleString()}</dd>
+                        {p.why && (<><dt className="text-subtle">why</dt><dd className="font-sans">{p.why}</dd></>)}
+                      </dl>
+                      {(p.status === "approved" || p.status === "auto_approved") && (
+                        <button disabled={running} onClick={() => onChange(refund(plan, p.id))} className="mt-2 flex items-center gap-1 rounded-lg border border-line bg-background px-2 py-0.5 text-foreground hover:bg-surface disabled:opacity-40">
+                          <RotateCcw size={11} /> Refund to card
+                        </button>
+                      )}
+                    </details>
+                  )}
+                </div>
+              ))}
             </section>
             <section>
-              <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-white/70"><Mail size={14} /> Outbox</h3>
-              <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
-                {a.outbox.map((m) => (
-                  <details key={m.id} className="group rounded-lg border border-white/10 bg-black/20 p-3 text-sm">
-                    <summary className="flex cursor-pointer list-none items-center gap-2">
-                      {m.channel === "sms" ? <MessageSquare size={13} className="text-white/50" /> : <Mail size={13} className="text-white/50" />}
-                      <span className="min-w-0 flex-1 truncate">{m.subject}</span>
-                      {m.status === "sent" ? (
-                        <span className="text-xs text-emerald-300">Sent</span>
-                      ) : (
-                        <button disabled={running} className="rounded-md bg-white/10 px-2 py-0.5 text-xs hover:bg-white/20 disabled:opacity-40" onClick={(e) => { e.preventDefault(); onChange(sendMessage(plan, m.id)); }}>Approve & send</button>
-                      )}
-                    </summary>
-                    <div className="mt-2 text-xs text-white/40">To: {m.to}</div>
-                    <pre className="mt-1 whitespace-pre-wrap font-sans text-xs leading-relaxed text-white/70">{m.body}</pre>
-                  </details>
-                ))}
-              </div>
+              <h3 className="section-head"><Mail size={14} /> Outbox</h3>
+              {a.outbox.map((m) => (
+                <details key={m.id} className="group border-b border-line py-3 text-sm">
+                  <summary className="flex cursor-pointer list-none items-center gap-2">
+                    {m.channel === "sms" ? <MessageSquare size={13} className="shrink-0 text-muted" /> : <Mail size={13} className="shrink-0 text-muted" />}
+                    <span className="min-w-0 flex-1 truncate text-foreground">{m.subject}</span>
+                    {m.status === "sent" ? (
+                      <span className="flex items-center gap-1 text-xs font-medium text-success"><Check size={12} /> Sent</span>
+                    ) : (
+                      <button disabled={running} className="shrink-0 rounded-lg border border-line px-2 py-0.5 text-xs font-medium text-foreground hover:bg-surface disabled:opacity-40" onClick={(e) => { e.preventDefault(); onChange(sendMessage(plan, m.id)); }}>Approve & send</button>
+                    )}
+                  </summary>
+                  <div className="mt-2 text-xs text-subtle">To: {m.to}</div>
+                  <pre className="mt-1 whitespace-pre-wrap font-sans text-xs leading-relaxed text-muted">{m.body}</pre>
+                </details>
+              ))}
             </section>
           </div>
 
           <section>
-            <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-white/70">
-              {intact ? <ShieldCheck size={14} className="text-emerald-300" /> : <ShieldX size={14} className="text-red-300" />}
-              Audit log <span className="text-xs font-normal text-white/40">{intact ? "hash chain verified" : "chain broken!"} · {a.audit.length} entries</span>
+            <h3 className="section-head">
+              {intact ? <ShieldCheck size={14} className="text-success" /> : <ShieldX size={14} className="text-danger" />}
+              Audit log <span className="text-xs font-normal normal-case tracking-normal text-muted">{intact ? "hash chain verified" : "chain broken!"} · {a.audit.length} entries</span>
             </h3>
-            <div className="scrollbar-thin max-h-56 overflow-y-auto rounded-xl border border-white/10 bg-black/30 font-mono text-[11px]">
+            <div className="scrollbar-thin mt-3 max-h-56 overflow-y-auto rounded-xl border border-line bg-surface font-mono text-[11px]">
               {a.audit.map((e, i) => (
-                <div key={i} className="flex gap-3 border-b border-white/5 px-3 py-1.5 last:border-0">
-                  <span className="hidden shrink-0 text-white/30 sm:inline">{new Date(e.ts).toLocaleTimeString()}</span>
-                  <span className="w-20 shrink-0 text-accent-soft">{e.actor}</span>
-                  <span className="w-24 shrink-0 truncate text-white/70 sm:w-28">{e.action}</span>
-                  <span className="min-w-0 flex-1 truncate text-white/50" title={e.detail}>{e.detail}</span>
-                  <span className="hidden shrink-0 text-white/25 sm:inline">#{e.hash}</span>
+                <div key={i} className="flex gap-3 border-b border-line px-3 py-1.5 last:border-0">
+                  <span className="hidden shrink-0 text-subtle sm:inline">{new Date(e.ts).toLocaleTimeString()}</span>
+                  <span className="w-20 shrink-0 text-accent">{e.actor}</span>
+                  <span className="w-24 shrink-0 truncate text-foreground sm:w-28">{e.action}</span>
+                  <span className="min-w-0 flex-1 truncate text-muted" title={e.detail}>{e.detail}</span>
+                  <span className="hidden shrink-0 text-subtle sm:inline">#{e.hash}</span>
                 </div>
               ))}
             </div>
@@ -237,11 +234,11 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
 
 function Num({ label, value, onChange, disabled }: { label: string; value: number; onChange: (v: number) => void; disabled?: boolean }) {
   return (
-    <label className="text-xs text-white/50">
+    <label className="text-xs font-medium text-muted">
       {label}
-      <div className="relative mt-1">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30">$</span>
-        <input type="number" min={0} disabled={disabled} className="input pl-6 font-mono" value={value} onChange={(e) => onChange(Math.max(0, Number(e.target.value)))} />
+      <div className="relative mt-1.5">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-subtle">$</span>
+        <input type="number" min={0} disabled={disabled} className="input bg-surface pl-6 font-mono" value={value} onChange={(e) => onChange(Math.max(0, Number(e.target.value)))} />
       </div>
     </label>
   );

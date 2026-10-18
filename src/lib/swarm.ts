@@ -43,8 +43,8 @@ const VARIANCE = 0.05;
 
 const DEFS: { key: CategoryKey; name: string; agent: AgentId; owns: string; line: RegExp; vendor: RegExp }[] = [
   { key: "food", name: "Food", agent: "food", owns: "Catering, dietary split, portions, delivery timing", line: /food|cater|meal|drink|snack/i, vendor: /food|cater|meal|drink|snack/i },
-  { key: "venue", name: "Venue & Services", agent: "venue", owns: "Venue, Wi-Fi, power, A/V, furniture, staffing & security, permits, COI, floorplan", line: /venue|\bav\b|wi-?fi|rental|staff|secur|permit|insur/i, vendor: /venue|\bav\b|wi-?fi|rental|staff|secur|tent|furniture/i },
-  { key: "program", name: "Program & Run-of-show", agent: "program", owns: "Agenda, attendee-facing schedule, day-of timing, photo/video", line: /program|entertain|photo|video/i, vendor: /photo|video|entertain|dj|music/i },
+  { key: "venue", name: "Venue & Services", agent: "venue", owns: "Venue, Wi-Fi, power, A/V, furniture, decor & supplies, staffing & security, permits, COI, floorplan", line: /venue|\bav\b|wi-?fi|rental|staff|secur|permit|insur|decor|floral|suppl|misc|tent/i, vendor: /venue|\bav\b|wi-?fi|rental|staff|secur|tent|furniture|decor|floral|suppl/i },
+  { key: "program", name: "Program & Run-of-show", agent: "program", owns: "Agenda, attendee-facing schedule, day-of timing, photo/video", line: /program|entertain|photo|video|music|dj|attire|beauty/i, vendor: /photo|video|entertain|dj|music|attire|beauty/i },
   { key: "merch", name: "Merch & Gifts", agent: "merch", owns: "Swag, print, prizes, speaker gifts, signage art (prizes route tax forms to Finance)", line: /swag|merch|prize|gift|print|sign/i, vendor: /swag|merch|prize|gift|print|sign/i },
   { key: "people", name: "People Logistics", agent: "people", owns: "Buses, shuttles, hotels, travel", line: /transport|travel|bus|shuttle|hotel/i, vendor: /transport|travel|bus|shuttle|hotel/i },
   { key: "sponsorship", name: "Sponsorship", agent: "sponsorship", owns: "Revenue, sponsor tiers, deal sheet, deliverables", line: /sponsor/i, vendor: /sponsor/i },

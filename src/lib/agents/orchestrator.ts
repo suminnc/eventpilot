@@ -4,7 +4,7 @@ import { chatJSON, getLLMConfig, type LLMConfig } from "../llm";
 import { applyFeedbackOffline, parseBriefOffline } from "../parse";
 import { namePattern, billableHours, venueSearchTool, weatherTool } from "../tools";
 import { linkPermitTasks, permitChecklist } from "../permits";
-import { allocateBudget } from "../budget";
+import { allocateBudget, fundPermits } from "../budget";
 import { opsPlan, opsTasks } from "../ops";
 import type {
   AgentEvent,
@@ -408,7 +408,7 @@ export async function runPlanner(req: PlanRequest, emit: Emit): Promise<EventPla
     venues,
     selectedVenue,
     ...(req.previous?.autopilot ? { autopilot: req.previous.autopilot } : {}),
-    budget,
+    budget: fundPermits(budget, permits),
     schedule,
     tasks: tasks.map((t) => ({ ...t, done: !!req.previous?.tasks.some((x) => x.done && x.title === t.title) })),
     vendors,

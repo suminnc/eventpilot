@@ -1,4 +1,4 @@
-import { allocateBudget } from "./budget";
+import { allocateBudget, fundPermits } from "./budget";
 import { linkPermitTasks, permitChecklist } from "./permits";
 import { opsPlan } from "./ops";
 import type { EventPlan } from "./types";
@@ -34,7 +34,7 @@ export function reselectVenue(plan: EventPlan, idx: number): EventPlan {
     summary: swap(plan.summary),
     invite: { subject: swap(plan.invite.subject), body: swap(plan.invite.body), sms: swap(plan.invite.sms) },
     schedule: plan.schedule.map((s) => ({ ...s, title: swap(s.title), detail: swap(s.detail) })),
-    budget: allocateBudget(plan.brief, to),
+    budget: fundPermits(allocateBudget(plan.brief, to), permits),
     permits,
     ops: plan.ops ? opsPlan(plan.brief, plan.schedule, to) : plan.ops,
     tasks,

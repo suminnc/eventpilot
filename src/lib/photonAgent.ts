@@ -392,7 +392,7 @@ async function autoRun(planId: string) {
     }
     const cur = agent().state.plan!;
     await say(
-      `${SWARM_NAME} v${SWARM_VERSION} is running ${cur.brief.title} on its own: ${sent} vendor and permit emails sent${failed.length ? ` (${failed.length} failed: ${failed[0]})` : ""}. It negotiates replies, follows up and switches vendors by itself, and texts you only for money approvals. ${buildSwarm(cur).approval} Text SWARM, VENDORS or STATUS anytime.`,
+      `${SWARM_NAME} v${SWARM_VERSION} is running ${cur.brief.title} on its own: ${sent} vendor and permit emails sent${failed.length ? ` (${failed.length} failed: ${failed[0]})` : ""}. It negotiates replies, follows up and switches vendors by itself, and texts you only for money approvals. ${buildSwarm(cur).approval} Text TEAM, VENDORS or STATUS anytime.`,
       `auto-${planId.slice(0, 8)}`,
     );
   } finally {

@@ -1,5 +1,5 @@
 import { billableHours } from "./tools";
-import type { BudgetLine, EventBrief, Venue } from "./types";
+import type { BudgetLine, EventBrief, Permit, Venue } from "./types";
 
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 
@@ -24,5 +24,25 @@ export function allocateBudget(brief: EventBrief, venue: Venue | undefined): Bud
   out.push({ category: "Contingency", amount: contingency, note: "10% buffer for surprises (target 10–15%)" });
   const drift = brief.budget - out.reduce((s, l) => s + l.amount, 0);
   if (drift && remaining > 0) out.reduce((a, l) => (l !== out[0] && l.amount > a.amount ? l : a), out[1]).amount += drift;
+  return out;
+}
+
+/** Raise the permits line to cover the estimated permit fees, funded from the largest flexible lines so the total stays on budget. */
+export function fundPermits(lines: BudgetLine[], permits: Permit[]): BudgetLine[] {
+  const fees = permits.reduce((s, p) => s + (p.fee || 0), 0);
+  const out = lines.map((l) => ({ ...l }));
+  const line = out.find((l) => /permit/i.test(l.category));
+  if (!line || line.amount >= fees) return out;
+  const need = fees - line.amount;
+  const donors = out.filter((l) => l !== line && !/^venue$|contingency|buffer|reserve/i.test(l.category));
+  const pool = donors.reduce((s, l) => s + l.amount, 0);
+  if (pool <= need) return out;
+  let moved = 0;
+  donors.forEach((d, i) => {
+    const take = i === donors.length - 1 ? need - moved : Math.round((need * d.amount) / pool);
+    d.amount -= take; moved += take;
+  });
+  line.amount += moved;
+  line.note = `Covers ${money(fees)} in estimated permit fees`;
   return out;
 }

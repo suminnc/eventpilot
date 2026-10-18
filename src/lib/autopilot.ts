@@ -103,7 +103,7 @@ export function planSteps(plan: EventPlan, mandate: SpendMandate, opts: { awaitV
           body: `Hello ${venue.name} events team,\n\nWe'd like to place a hold for ${b.title} on ${b.date} from ${b.startTime} for ${b.durationHours} hours, ${b.guests.toLocaleString()} guests.\nRequirements: ${b.constraints.join(", ") || "standard AV, Wi-Fi"}.\n\nCould you share availability, a quote, and your deposit terms?\n\nThanks!`,
           taskId: findTask(/hold on|venue/i),
         },
-        "scout",
+        "venue",
       ),
     );
     const venueLine = plan.budget.find((l) => l.category === "Venue")?.amount ?? venue.pricePerHour * b.durationHours;
@@ -143,7 +143,7 @@ export function planSteps(plan: EventPlan, mandate: SpendMandate, opts: { awaitV
             : `Hi ${q.vendor} team,\n\nWe'd like to book ${v.suggestion.toLowerCase()} for ${b.title} in ${b.city} on ${b.date}, at the ${money(q.price)} we agreed${q.listPrice && q.listPrice > q.price ? ` (down from your ${money(q.listPrice)} list price)` : ""}.\n${v.contactTip}\n\nWe'll pay a 25% deposit by virtual card today. Please confirm availability and send your contract.`,
           taskId: findTask(new RegExp(v.category, "i")),
         },
-        "logistics",
+        "logistics_lead",
     );
     steps.push({ ...book, apply: (a, p) => (a.shortlists?.find((x) => x.category === v.category)?.pick === sl.pick ? book.apply(a, p) : { a, plan: p }) });
     if (!opts.awaitVendors) steps.push(buy(q.vendor, v.category, `${v.category} deposit (25%)`, q.price * 0.25, new RegExp(`Book AV|${v.category}`, "i"), sl.why));

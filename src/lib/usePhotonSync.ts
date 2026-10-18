@@ -56,26 +56,36 @@ export function usePhotonSync(plan: EventPlan | null, setPlan: (p: EventPlan) =>
   }, [adopt]);
 
   const configured = !!state.live?.configured;
+  const [retry, setRetry] = useState(0);
+  const reachable = configured && !state.live?.error;
   useEffect(() => {
-    if (!configured || !plan || rev.current === -1 || JSON.stringify(plan) === synced.current) return;
+    if (!reachable || !plan || rev.current === -1 || JSON.stringify(plan) === synced.current) return;
     clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
       pushing.current = true;
       timer.current = undefined;
       const body = planRef.current!;
       try {
-        const r = await fetch("/api/photon", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ plan: body, rev: rev.current }) });
-        const j = (await r.json()) as { rev?: number; plan?: EventPlan | null };
+        const send = () => fetch("/api/photon", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ plan: body, rev: rev.current }) });
+        let r = await send();
+        let j = (await r.json()) as { rev?: number; plan?: EventPlan | null };
         if (typeof j.rev === "number") rev.current = j.rev;
+        // A plan created here after the server's active one wins: hand it over instead of discarding it.
+        if (r.status === 409 && j.plan && j.plan.id !== body.id && Date.parse(body.createdAt) > Date.parse(j.plan.createdAt)) {
+          r = await send();
+          j = (await r.json()) as { rev?: number; plan?: EventPlan | null };
+          if (typeof j.rev === "number") rev.current = j.rev;
+        }
         if (r.status === 409 && j.plan) adopt(j.plan, true);
         else if (r.ok) synced.current = JSON.stringify(body);
+        else setTimeout(() => setRetry((n) => n + 1), 5000);
       } catch {
-        /* retried on the next change */
+        setTimeout(() => setRetry((n) => n + 1), 5000);
       } finally {
         pushing.current = false;
       }
     }, 500);
-  }, [plan, configured, adopt]);
+  }, [plan, reachable, adopt, retry]);
 
   return state;
 }

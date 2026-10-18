@@ -60,7 +60,6 @@ export default function Home() {
             <Image src="/images/hero-pier.jpg" alt="" fill priority sizes="100vw" className="-z-20 object-cover" />
             <div className="absolute inset-0 -z-10 bg-accent/85" />
             <div className="mx-auto flex max-w-[760px] flex-col items-center text-center">
-              <div className="mb-7 text-xs font-medium uppercase tracking-[0.1em] text-white/75">8 specialist agents · live tools · one prompt</div>
               <h1 className="font-display text-5xl leading-[1.04] tracking-[-0.015em] text-white sm:text-[68px]">
                 Describe your event.
                 <br />

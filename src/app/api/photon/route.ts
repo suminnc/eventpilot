@@ -1,38 +1,35 @@
-import { ApiError } from "@photon-ai/api";
-import { isLinked, organizerReplies, photonConfig, textOrganizer } from "@/lib/photon";
+import { photonConfig } from "@/lib/photon";
+import { pushPlan, snapshot, startPhotonAgent } from "@/lib/photonAgent";
+import type { EventPlan } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const mask = (h: string) => (h.includes("@") ? h.replace(/^(.).*(@.*)$/, "$1•••$2") : `•••${h.slice(-4)}`);
-const fail = (e: unknown) => Response.json({ error: e instanceof ApiError ? `Photon API ${e.status}` : "Photon request failed" }, { status: 502 });
 
-/** GET ?since=<ms> → config + organizer replies since then. */
-export async function GET(req: Request) {
+function live() {
   const c = photonConfig();
-  if (!c) return Response.json({ configured: false });
-  const info = { configured: true, platform: c.platform, agent: c.agent, organizer: mask(c.organizer) };
-  const since = Number(new URL(req.url).searchParams.get("since"));
-  if (!since) return Response.json({ ...info, linked: isLinked(), messages: [] });
-  try {
-    const messages = await organizerReplies(new Date(Math.max(since, Date.now() - 7 * 86_400_000) - 5_000));
-    return Response.json({ ...info, linked: isLinked(), messages });
-  } catch (e) {
-    return fail(e);
-  }
+  if (!c) return null;
+  const s = snapshot();
+  return { configured: true, platform: c.platform, agent: c.agent, organizer: mask(c.organizer), linked: s.linked, error: s.error, working: s.working };
 }
 
-/** POST { text, key } → text the organizer (only the configured organizer can ever be messaged). */
+/** GET ?rev=<n> → messaging status, the conversation, and the active plan when it changed since rev. */
+export async function GET(req: Request) {
+  const l = live();
+  if (!l) return Response.json({ live: { configured: false } });
+  startPhotonAgent();
+  const s = snapshot();
+  const rev = Number(new URL(req.url).searchParams.get("rev"));
+  return Response.json({ live: l, rev: s.rev, thread: s.thread, ...(rev === s.rev ? {} : { plan: s.plan }) });
+}
+
+/** POST { plan, rev } → make this the active plan the Photon agent acts on. 409 + server plan if it changed in the meantime. */
 export async function POST(req: Request) {
   if (!photonConfig()) return Response.json({ error: "Photon is not configured" }, { status: 400 });
-  const { text, key } = (await req.json().catch(() => ({}))) as { text?: unknown; key?: unknown };
-  if (typeof text !== "string" || !text.trim() || text.length > 1500 || typeof key !== "string" || !/^[\w:-]{8,120}$/.test(key)) {
-    return Response.json({ error: "text and key are required" }, { status: 400 });
-  }
-  try {
-    const status = await textOrganizer(text, key);
-    return Response.json({ status }, { status: status === "sent" ? 200 : 409 });
-  } catch (e) {
-    return fail(e);
-  }
+  const { plan, rev } = (await req.json().catch(() => ({}))) as { plan?: EventPlan; rev?: unknown };
+  if (!plan || typeof plan.id !== "string" || !plan.brief || typeof rev !== "number") return Response.json({ error: "plan and rev are required" }, { status: 400 });
+  const ok = pushPlan(plan, rev);
+  const s = snapshot();
+  return Response.json({ rev: s.rev, ...(ok ? {} : { plan: s.plan }) }, { status: ok ? 200 : 409 });
 }

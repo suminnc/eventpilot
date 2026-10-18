@@ -36,7 +36,7 @@ export function parseBriefOffline(prompt: string, base: Partial<EventBrief> = {}
 
   const pn = p.replace(/(\d),(\d{3})/g, "$1$2");
   const guestsM =
-    pn.match(/(\d{1,5})\s*(?:\+\s*)?(?:people|guests|attendees|hackers|folks|ppl|friends|students|pax|kids|adults|of us)/) ||
+    pn.match(/(\d{1,5})\s*(?:\+\s*)?-?\s*(?:person|people|guests?|attendees|hackers|folks|ppl|friends|students|pax|kids|adults|of us)/) ||
     pn.match(/\b(?:for|party of|table for)\s+(\d{1,5})\b(?!\s*(?:h\b|hours?|hrs?|days?|min|%|am|pm|k\b|:\d))/);
   const budgetM = p.match(/\$\s?(\d[\d,]*(?:\.\d+)?)\s*(k\b)?/) || p.match(/(\d[\d,]*)\s*(k\b)?\s*(?:dollars|usd|budget)/);
   let budget = base.budget || 0;

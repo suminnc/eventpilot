@@ -29,7 +29,7 @@ export function decisionText(plan: EventPlan, items: Purchase[]): string {
 
 export function statusText(plan: EventPlan): string {
   const a = plan.autopilot;
-  if (!a) return `EventPilot · ${plan.brief.title}\nAutopilot hasn't run yet.`;
+  if (!a) return `EventPilot · ${plan.brief.title}\nAutopilot hasn't run yet. Reply RUN to start it.`;
   const pending = a.purchases.filter((p) => p.status === "pending");
   const picks = (a.shortlists ?? []).map((s) => `${s.category}: ${s.quotes[s.pick].vendor} (${money(s.quotes[s.pick].price)})`);
   return [

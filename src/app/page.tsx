@@ -1,11 +1,12 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import { ArrowRight, Bot, History, RotateCcw, Send, Trash2 } from "lucide-react";
 import { AgentRoster, AgentTrace } from "@/components/AgentTrace";
 import { PlanView } from "@/components/PlanView";
 import { PRESETS } from "@/components/presets";
 import { usePlanner } from "@/lib/usePlanner";
+import { PhotonContext, usePhotonSync } from "@/lib/usePhotonSync";
 import { deletePlan, loadPlans, savePlan } from "@/lib/storage";
 import type { EventPlan } from "@/lib/types";
 
@@ -25,6 +26,8 @@ export default function Home() {
   const started = running || events.length > 0 || plan;
 
   useEffect(() => setSaved(loadPlans()), []);
+  const refreshSaved = useCallback(() => setSaved(loadPlans()), []);
+  const photon = usePhotonSync(plan, setPlan, refreshSaved);
   useEffect(() => {
     if (plan) {
       savePlan(plan);
@@ -40,6 +43,7 @@ export default function Home() {
   };
 
   return (
+    <PhotonContext.Provider value={photon}>
     <main className="min-h-screen bg-background">
       <header className="border-b border-line">
         <div className="mx-auto flex max-w-[1200px] items-center justify-between px-6 py-[18px]">
@@ -187,5 +191,6 @@ export default function Home() {
         </section>
       )}
     </main>
+    </PhotonContext.Provider>
   );
 }

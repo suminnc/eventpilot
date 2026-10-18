@@ -20,6 +20,8 @@ const TYPES: [RegExp, string][] = [
 
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 
+const MONTH_ONLY = /\b(last|next|this|in|for)\s+(?:(early|mid|late)[\s-]+)?(january|february|march|april|may|june|july|august|september|october|november|december)\b/;
+
 const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 const WEEKDAY = /\b(next|this|on)?\s*(sun|mon|tue|wed|thu|fri|sat)[a-z]*day\b/;
 
@@ -57,6 +59,15 @@ export function parseBriefOffline(prompt: string, base: Partial<EventBrief> = {}
     let y = md[3] ? +md[3] : now.getFullYear();
     if (!md[3] && new Date(y, m, +md[2]) < now) y += 1;
     date = `${y}-${String(m + 1).padStart(2, "0")}-${String(+md[2]).padStart(2, "0")}`;
+  } else if (!date && MONTH_ONLY.test(p)) {
+    const mo = p.match(MONTH_ONLY)!;
+    const now = new Date();
+    const m = MONTHS.indexOf(mo[3].slice(0, 3));
+    const day = mo[2] === "early" ? 5 : mo[2] === "late" ? 25 : 15;
+    let y = now.getFullYear();
+    if (mo[1] === "last") { if (new Date(y, m, day) >= now) y -= 1; }
+    else if (new Date(y, m, day) < now || (mo[1] === "next" && m === now.getMonth())) y += 1;
+    date = `${y}-${String(m + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
   } else if (!date && /\btomorrow\b/.test(p)) date = defaultDate(1);
   else if (!date && /\byesterday\b/.test(p)) date = defaultDate(-1);
   else if (!date && /\btoday\b|\btonight\b/.test(p)) date = defaultDate(0);
@@ -69,6 +80,8 @@ export function parseBriefOffline(prompt: string, base: Partial<EventBrief> = {}
   } else if (!date && /this weekend/.test(p)) date = defaultDate((6 - new Date().getDay() + 7) % 7 || 7);
   else if (!date && /next week/.test(p)) date = defaultDate(7);
   else if (!date && /next month/.test(p)) date = defaultDate(30);
+  else if (!date && /last week/.test(p)) date = defaultDate(-7);
+  else if (!date && /last month/.test(p)) date = defaultDate(-30);
   const assumed: string[] = [];
   if (!date) assumed.push("the date");
   if (!date) date = defaultDate(eventType === "wedding" ? 180 : eventType === "hackathon" || eventType === "conference" ? 60 : 30);

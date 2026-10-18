@@ -311,7 +311,8 @@ async function critic(ctx: Ctx, plan: Omit<EventPlan, "risks" | "score" | "summa
     const perGuest = brief.budget / brief.guests;
     if (perGuest < 20) risks.push({ level: perGuest < 5 ? "high" : "medium", issue: `Only ${money(perGuest)} per guest`, mitigation: "Seek sponsors, go potluck/food-truck, or trim headcount." });
     const days = Math.round((new Date(brief.date).getTime() - Date.now()) / 86_400_000);
-    if (days < 14) risks.push({ level: "high", issue: `Only ${Math.max(0, days)} days of lead time`, mitigation: "Book venue + catering today; send invites within 24h." });
+    if (days < 0) risks.push({ level: "high", issue: `The date (${brief.date}) has already passed`, mitigation: "Pick a future date, or ask for a recap/reunion plan instead." });
+    else if (days < 14) risks.push({ level: "high", issue: `Only ${days} days of lead time`, mitigation: "Book venue + catering today; send invites within 24h." });
     if (brief.guests > 100) risks.push({ level: "low", issue: "Large headcount — check-in bottleneck", mitigation: "Use QR check-in and two lines staffed by volunteers." });
     const late = (plan.permits ?? []).filter((p) => p.atRisk);
     if (late.length) risks.push({ level: "high", issue: `${late.length} permit${late.length > 1 ? "s" : ""} past normal lead time: ${late.map((p) => p.name).join("; ")}`, mitigation: "Call each agency today for expedited review, and ask the venue which standing permits it already holds." });

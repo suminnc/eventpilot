@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #07070c;
-  --foreground: #ececf1;
+  --background: #0d0c0a;
+  --foreground: #f1ece4;
 }
 
 @theme inline {
@@ -10,6 +10,9 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-display);
+  --color-accent: #ff6a3d;
+  --color-accent-soft: #ffb598;
 }
 
 body {
@@ -20,11 +23,9 @@ body {
 
 .bg-grid {
   background-image:
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(139, 92, 246, 0.25), transparent 60%),
-    radial-gradient(ellipse 50% 40% at 90% 10%, rgba(56, 189, 248, 0.12), transparent 60%),
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: auto, auto, 44px 44px, 44px 44px;
+    radial-gradient(ellipse 70% 40% at 50% -12%, rgba(255, 106, 61, 0.14), transparent 65%),
+    radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: auto, 22px 22px;
 }
 
 @utility card {
@@ -32,14 +33,14 @@ body {
 }
 
 @utility input {
-  @apply w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none transition placeholder:text-white/30 focus:border-violet-400/60 focus:ring-2 focus:ring-violet-500/20;
+  @apply w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none transition placeholder:text-white/30 focus:border-accent/60 focus:ring-2 focus:ring-accent/20;
 }
 
 @utility btn {
   @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50;
 }
 @utility btn-primary {
-  @apply btn bg-gradient-to-r from-violet-500 to-sky-500 text-white shadow-lg shadow-violet-500/20 hover:brightness-110;
+  @apply btn bg-accent font-semibold text-[#1a0d07] hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
 }
 @utility btn-ghost {
   @apply btn border border-white/10 bg-white/[0.04] text-white/80 hover:bg-white/[0.08];
@@ -59,3 +60,5 @@ body {
 
 .scrollbar-thin::-webkit-scrollbar { width: 6px; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+
+.font-display { font-family: var(--font-display), Georgia, serif; font-weight: 400; letter-spacing: -0.01em; }

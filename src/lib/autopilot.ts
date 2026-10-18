@@ -1,4 +1,4 @@
-import type { AuditEntry, Autopilot, EventPlan, OutboxMessage, Purchase, SpendMandate } from "./types";
+import type { AuditEntry, Autopilot, EventBrief, EventPlan, OutboxMessage, Purchase, Quote, Shortlist, SpendMandate } from "./types";
 
 /**
  * Autopilot: turns a plan into executed actions (outreach + guarded purchases).
@@ -68,10 +68,10 @@ export function planSteps(plan: EventPlan, mandate: SpendMandate): AutopilotStep
     }),
   });
 
-  const buy = (vendor: string, category: string, purpose: string, amount: number, taskRe?: RegExp): AutopilotStep => ({
+  const buy = (vendor: string, category: string, purpose: string, amount: number, taskRe?: RegExp, why?: string): AutopilotStep => ({
     label: `Payments: request ${money(amount)} ${purpose.toLowerCase()} for ${vendor}`,
     apply: (a, p) => {
-      const base = { id: `p${a.purchases.length}`, idempotencyKey: `${p.id.slice(0, 8)}-${fnv(vendor + purpose)}`, vendor, category, purpose, amount: Math.round(amount), ts: Date.now() };
+      const base = { id: `p${a.purchases.length}`, idempotencyKey: `${p.id.slice(0, 8)}-${fnv(vendor + purpose)}`, vendor, category, purpose, amount: Math.round(amount), ts: Date.now(), why };
       if (a.purchases.some((x) => x.idempotencyKey === base.idempotencyKey)) return { a, plan: p };
       const verdict = evaluate(a.mandate, base, committed(a.purchases));
       const purchase: Purchase = { ...base, ...verdict, card: verdict.status === "auto_approved" ? virtualCard() : undefined };
@@ -108,19 +108,28 @@ export function planSteps(plan: EventPlan, mandate: SpendMandate): AutopilotStep
   }
 
   for (const v of plan.vendors) {
+    const sl = shortlist(b, v.category, v.estCost);
+    const q = sl.quotes[sl.pick];
+    steps.push({
+      label: `Shopper: compared ${sl.quotes.length} ${v.category} quotes → ${q.vendor} (${money(q.price)})`,
+      apply: (a, p) => ({
+        a: { ...a, shortlists: [...(a.shortlists ?? []), sl], audit: appendAudit(a.audit, "shopper", "shortlist", `${v.category}: ${sl.why}`) },
+        plan: p,
+      }),
+    });
     steps.push(
       msg(
         {
           channel: "email",
-          to: `${v.category.toLowerCase().replace(/\W+/g, "")}-vendors@rfq.eventpilot.app`,
-          subject: `RFQ: ${v.category} for ${b.title} (${b.guests.toLocaleString()} guests, ${b.date})`,
-          body: `Hi,\n\nWe're sourcing ${v.suggestion.toLowerCase()} for ${b.title} in ${b.city} on ${b.date}.\nTarget budget: ${money(v.estCost)}. ${v.contactTip}\n\nPlease reply with a quote and availability within 48 hours.`,
+          to: `bookings@${slug(q.vendor)}.com`,
+          subject: `Booking: ${v.category} for ${b.title} (${b.guests.toLocaleString()} guests, ${b.date})`,
+          body: `Hi ${q.vendor} team,\n\nWe'd like to book ${v.suggestion.toLowerCase()} for ${b.title} in ${b.city} on ${b.date}, based on your quote of ${money(q.price)}.\n${v.contactTip}\n\nWe'll pay a 25% deposit by virtual card today. Please confirm availability and send your contract.`,
           taskId: findTask(new RegExp(v.category, "i")),
         },
         "logistics",
       ),
     );
-    steps.push(buy(`${v.category} vendor`, v.category, `${v.category} deposit (25%)`, v.estCost * 0.25, new RegExp(`Book AV|${v.category}`, "i")));
+    steps.push(buy(q.vendor, v.category, `${v.category} deposit (25%)`, q.price * 0.25, new RegExp(`Book AV|${v.category}`, "i"), sl.why));
   }
 
   steps.push(
@@ -131,7 +140,7 @@ export function planSteps(plan: EventPlan, mandate: SpendMandate): AutopilotStep
 }
 
 export function emptyAutopilot(mandate: SpendMandate): Autopilot {
-  return { mandate, purchases: [], outbox: [], audit: [] };
+  return { mandate, purchases: [], outbox: [], audit: [], shortlists: [] };
 }
 
 export function decide(plan: EventPlan, id: string, approve: boolean): EventPlan {
@@ -153,6 +162,107 @@ export function sendMessage(plan: EventPlan, id: string): EventPlan {
     ...plan,
     tasks: m.taskId ? plan.tasks.map((t) => (t.id === m.taskId ? { ...t, done: true } : t)) : plan.tasks,
     autopilot: { ...a, outbox: a.outbox.map((x) => (x.id === id ? { ...x, status: "sent" } : x)), audit: appendAudit(a.audit, "organizer", "send_message", `${m.channel} → ${m.to}`) },
+  };
+}
+
+const MERCHANTS: Record<string, [string, string[]][]> = {
+  Catering: [
+    ["Golden Gate Banquets", ["high-volume", "buffet lines"]],
+    ["Mission Street Kitchens", ["halal", "vegan", "gluten-free", "vegetarian"]],
+    ["Bay Leaf Catering Co.", ["farm-to-table", "vegetarian"]],
+  ],
+  AV: [
+    ["Bay Pro Staging", ["stage", "livestream"]],
+    ["SoundCheck AV", ["wi-fi", "budget"]],
+    ["Lumen Event Tech", ["livestream", "lighting", "wi-fi"]],
+  ],
+  Photography: [
+    ["Fogline Studio", ["photo", "video"]],
+    ["Shutter & Co.", ["photo", "budget"]],
+    ["Pixel Pier Media", ["video", "same-day edits"]],
+  ],
+  Rentals: [
+    ["Canopy & Co.", ["tents", "heaters"]],
+    ["Party Rental Depot", ["budget"]],
+    ["Elevate Rentals", ["ada", "accessible", "tents"]],
+  ],
+};
+const SHAPES = [
+  { mult: 1.0, rating: 4.6, leadDays: 5, cancellable: true },
+  { mult: 0.84, rating: 4.1, leadDays: 12, cancellable: false },
+  { mult: 1.17, rating: 4.8, leadDays: 3, cancellable: true },
+];
+
+const daysUntil = (date: string) => Math.ceil((new Date(`${date}T00:00:00`).getTime() - Date.now()) / 86_400_000);
+
+/** Discovery + decision: gathers 3 quotes for a category and picks one, scored against the brief. */
+export function shortlist(brief: EventBrief, category: string, target: number): Shortlist {
+  const names = MERCHANTS[category] ?? [[`${category} Partners`, []], [`Budget ${category} Co.`, ["budget"]], [`Premier ${category}`, []]];
+  const needs = `${brief.constraints.join(" ")} ${brief.vibe}`.toLowerCase();
+  const days = daysUntil(brief.date);
+  const quotes: Quote[] = names.map(([vendor, tags], i) => {
+    const sh = SHAPES[(i + fnv(category).charCodeAt(0)) % 3];
+    return { vendor, tags, price: Math.round((target * sh.mult) / 50) * 50, rating: sh.rating, leadDays: sh.leadDays, cancellable: sh.cancellable };
+  });
+  const scored = quotes.map((q) => {
+    const fit = q.tags.filter((t) => needs.includes(t.split(" ")[0]));
+    const late = days < q.leadDays;
+    const delta = (q.price - target) / Math.max(1, target);
+    const score = q.rating * 10 - delta * 40 + fit.length * 6 + (q.cancellable ? 4 : 0) - (late ? 60 : 0);
+    return { q, fit, late, delta, score };
+  });
+  const best = scored.reduce((a, b) => (b.score > a.score ? b : a));
+  const pick = scored.indexOf(best);
+  for (const s of scored) {
+    s.q.note = s.late ? `Needs ${s.q.leadDays} days lead time; your event is in ${Math.max(0, days)}` : s.fit.length ? `Matches: ${s.fit.join(", ")}` : undefined;
+  }
+  const reasons = [
+    best.fit.length ? `matches your ${best.fit.join(", ")} needs` : "",
+    Math.abs(best.delta) < 0.03 ? `on the ${money(target)} target` : best.delta < 0 ? `${Math.round(-best.delta * 100)}% under the ${money(target)} target` : `${Math.round(best.delta * 100)}% over target, worth it for the fit`,
+    `${best.q.rating}★`,
+    best.q.cancellable ? "free cancellation" : "",
+  ].filter(Boolean);
+  const cheaper = scored.find((s) => s !== best && s.q.price < best.q.price);
+  const tradeoff = cheaper ? ` ${cheaper.q.vendor} was ${money(best.q.price - cheaper.q.price)} cheaper but ${cheaper.late ? "can't deliver in time" : cheaper.q.cancellable ? "rated lower" : "has no cancellation window"}.` : "";
+  return { category, target, quotes, pick, why: `Picked ${best.q.vendor}: ${reasons.join(", ")}.${tradeoff}` };
+}
+
+const LIVE = ["auto_approved", "approved", "pending"];
+
+/** Organizer overrides the agent's pick: cancels/refunds the old deposit and re-checks the new one against the mandate. */
+export function switchQuote(plan: EventPlan, category: string, idx: number): EventPlan {
+  const a = plan.autopilot!;
+  const sl = a.shortlists?.find((s) => s.category === category);
+  if (!sl || sl.pick === idx) return plan;
+  const q = sl.quotes[idx];
+  let purchases = a.purchases;
+  let audit = appendAudit(a.audit, "organizer", "switch_vendor", `${category}: ${sl.quotes[sl.pick].vendor} → ${q.vendor}`);
+  const old = purchases.find((p) => p.category === category && LIVE.includes(p.status));
+  if (old) {
+    const status = old.status === "pending" ? "canceled" : "refunded";
+    purchases = purchases.map((p) => (p.id === old.id ? { ...p, status, reason: `${status === "refunded" ? "Refunded to card" : "Canceled"}: organizer switched vendor` } : p));
+    audit = appendAudit(audit, "payments", status, `${old.vendor} ${money(old.amount)}`);
+  }
+  const purpose = `${category} deposit (25%)`;
+  const base = { id: `p${purchases.length}`, idempotencyKey: `${plan.id.slice(0, 8)}-${fnv(q.vendor + purpose + purchases.length)}`, vendor: q.vendor, category, purpose, amount: Math.round(q.price * 0.25), ts: Date.now(), why: `Organizer chose ${q.vendor} over the agent's pick` };
+  const v = evaluate(a.mandate, base, committed(purchases));
+  purchases = [...purchases, { ...base, ...v, card: v.status === "auto_approved" ? virtualCard() : undefined }];
+  audit = appendAudit(audit, "payments", v.status, `${q.vendor} ${money(base.amount)}: ${v.reason}`);
+  return { ...plan, autopilot: { ...a, purchases, audit, shortlists: a.shortlists!.map((s) => (s === sl ? { ...s, pick: idx } : s)) } };
+}
+
+/** Post-purchase: refund a settled deposit back to its single-use card. */
+export function refund(plan: EventPlan, id: string): EventPlan {
+  const a = plan.autopilot!;
+  const p = a.purchases.find((x) => x.id === id);
+  if (!p || !p.card || (p.status !== "approved" && p.status !== "auto_approved")) return plan;
+  return {
+    ...plan,
+    autopilot: {
+      ...a,
+      purchases: a.purchases.map((x) => (x.id === id ? { ...x, status: "refunded", reason: `Refunded to ${p.card}` } : x)),
+      audit: appendAudit(a.audit, "organizer", "refund", `${p.vendor} ${money(p.amount)} → ${p.card}`),
+    },
   };
 }
 

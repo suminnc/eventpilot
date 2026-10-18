@@ -1,32 +1,48 @@
 # EventPilot: LA Hacks AI Hackathon 2026 submission notes
 
-**One line:** you describe an event in one prompt. A crew of AI agents plans it, then the agents **carry the plan out**: they draft vendor outreach and make guarded purchases under a spend mandate you control. The flagship demo is **Cal Hacks 13.0**: 2,000 hackers, 36 hours, San Francisco.
+**One line:** describe an event in one prompt. A crew of AI agents plans it, then **runs it**: they compare vendors, book them, and pay deposits under a spend mandate you control, writing every step to a tamper-evident audit log. Flagship demo: **Cal Hacks 13.0**, 2,000 hackers, 36 hours, San Francisco.
 
 ## How it works
-1. **Plan.** A Coordinator hands work to Venue Scout, Budget Analyst, Scheduler, Logistics, Comms and Critic. Their reasoning and tool calls (`venue_search`, `budget_calculator`, live `weather_forecast`) stream into the UI. The reasoning model is StepFun `step-5-preview`, run with `reasoning_effort: low` to keep cost and latency down.
-2. **Refine.** Follow-up chat ("make it 20% cheaper", "add 500 more hackers") re-runs the crew with the change.
-3. **Autopilot.** One click runs the plan. Agents draft venue hold requests and vendor RFQs, request deposits, and complete the matching tasks. You approve anything over your threshold.
+1. **Plan.** A Coordinator hands work to Venue Scout, Budget Analyst, Scheduler, Logistics, Comms and a Critic. Their reasoning and tool calls (`venue_search`, `budget_calculator`, live `weather_forecast`) stream into the UI. The model is StepFun `step-5-preview` with `reasoning_effort: low`. Every agent has a deterministic fallback, so a failed model call never breaks the plan.
+2. **Refine.** Chat follow-ups like "make it 20% cheaper" or "add 500 more hackers" re-run the crew.
+3. **Autopilot.** One click and the **Shopper** collects 3 quotes per vendor category, scores them against the brief and explains its pick. **Logistics** drafts the booking emails. **Payments** pays deposits inside the mandate. You approve anything big, override any pick, send messages, and refund from the receipt.
+
+> Demo data: venue rates and vendor quotes are synthetic estimates. Payments and messages are **simulated**: no real card-network calls, and no real emails or SMS go out.
 
 ---
 
-## Creao: Best AI-First Disruptor / One-Person Company / Team Empowerment
-Running an event like Cal Hacks usually takes a team of 30+ organizers months of spreadsheets, vendor email threads and approval chains. EventPilot is AI-first from the start: the agent does the whole job, not just the chat. It reads the brief, scouts venues, balances a $500k budget, builds a 36-hour run-of-show, then **executes**. It sends the outreach, requests deposits and checks off the timeline. The human role shrinks to approving decisions. With it, one person can run an event that used to need an ops team, and a small team can run a much larger one.
-
 ## Visa: The Future of Shopping, Powered by AI, Secured by Visa
-EventPilot's **Payments agent** shows agentic purchasing with security built in, not added afterward:
-- **Spend mandate.** The organizer sets a total cap, a per-purchase cap and a category allowlist. The agent cannot go outside it, and blocked attempts are logged.
-- **Step-up approval.** Any purchase over the threshold sits in an approval queue until a human approves it.
-- **Single-use virtual cards.** Each approved purchase gets its own masked card, so if a merchant leaks the number, the damage stops at that one transaction.
-- **Idempotency keys.** If the agent retries, it can't pay twice.
-- **Tamper-evident audit log.** Every agent and human action is hash-chained, and the UI checks the chain.
+**Pitch:** EventPilot turns B2B event procurement, today a month of emails, spreadsheets and corporate-card requests, into one conversation with an agent that shops for you and pays safely.
 
-*Payments are simulated in this prototype; no real card-network calls are made. The next step would be to replace `virtualCard()` and `evaluate()` in `src/lib/autopilot.ts` with Visa Intelligent Commerce / tokenization APIs.*
+| Shopping stage | What EventPilot does |
+|---|---|
+| Discovery | The Shopper collects 3 quotes per category (catering, AV, photography, rentals) |
+| Decision-making | Scores price vs. target, rating, lead time and cancellation terms. Rules out vendors that can't deliver before the event date |
+| Personalization | Matches vendors to the brief, e.g. it picks a caterer covering *halal, vegan, gluten-free* because Cal Hacks asked for them |
+| Checkout | One click. The agent books and pays every deposit inside the mandate |
+| Payments | Spend mandate (total cap, per-purchase cap, category allowlist) plus approval above a threshold. A single-use virtual card for each payment. Idempotency keys stop double charges |
+| Post-purchase | Receipts, refund-to-card, and "choose this instead" overrides that cancel or refund the old deposit and re-check the new one against the mandate |
+
+**Trust & Responsibility (15%):** every recommendation shows *why* it was picked and what it traded off. People make the big decisions (approval queue, overrides). Blocked categories and caps are enforced in code, not in the prompt. Every agent and human action goes into a hash-chained audit log that the UI checks. Only the minimum data is used: the event brief, no personal data.
+**Commerce Impact (15%):** merchants get structured bookings that convert, with a deposit attached. Organizers spend minutes, not weeks. Single-use cards reduce fraud and chargebacks.
+**Next step:** replace `virtualCard()` and `evaluate()` in `src/lib/autopilot.ts` with Visa Intelligent Commerce, tokenized credentials and Visa's spend controls.
+
+## Creao
+Running an event like Cal Hacks usually takes a team of 30+ organizers months of spreadsheets, vendor email threads and approval chains. EventPilot is AI-first: the agent does the whole job, not just the chat. It reads the brief, scouts venues, balances a $500k budget, builds a 36-hour run-of-show, then **executes**: it compares and books vendors, pays deposits, drafts outreach and checks off the timeline. The human's job shrinks to approving decisions, so one person can run what used to take an ops team.
 
 ## Workday: Build the Future of Work with AI
-New event and operations staff spend their first weeks learning unwritten rules: which venues hold 2,000 people, how to split a budget, when to send the reminder email, who approves a $40k deposit. EventPilot puts that know-how into a crew of AI teammates. A new ops hire describes the goal and gets a complete, explained plan, with a timeline of owned tasks, a risk review from the Critic agent, and approval guardrails that teach company spend policy as they work. They contribute from day one, and the experienced staff stop being a bottleneck.
+- **Problem:** a new event or ops coordinator joins a student org or company and is handed a 2,000-person event. All the know-how is unwritten: which venues fit, how to split a budget, when deposits are due, who approves what.
+- **User:** early-career operations, events and program staff in their first months.
+- **How the agent works:** a Coordinator delegates to six specialist agents that plan, critique and then carry out the work (Autopilot). Every step is visible in a live reasoning trace.
+- **Autonomous:** venue search, budget, schedule, vendor comparison, outreach drafts, deposits under the mandate.
+- **Human in the loop:** the new hire sets the mandate, approves spend over the threshold, overrides vendor picks, and approves each message before it's sent.
+- **Data and assumptions:** only synthetic venue and vendor data plus the event brief. No employee or personal data.
+- **Responsible AI:** *Transparent* (every pick explains its reasoning and trade-offs), *Accountable* (approval queue and overrides), *Reliable* (deterministic fallbacks, exact budget math, a Critic agent that flags risks and gives a confidence score), *Privacy-preserving* (no personal data), *Fair* (vendors are scored on stated criteria, shown side by side).
+- **Org impact:** new hires can contribute from day one, senior staff stop being the bottleneck, and the mandate teaches company spend policy as they work.
 
 ## Paper: Best Designed Hack
-Dark, focused UI with a live agent roster and a streaming reasoning trace, so you can watch the crew think. The plan has tabbed views (overview, multi-day schedule, budget bar, venue picker, task checklist, invite preview), and the Autopilot console makes approvals and the audit log easy to scan. *(Ask Paper's booth whether the designs need to be made in Paper's tool.)*
+Design system: warm near-black canvas, a single signal-orange accent (`#ff6a3d`), Instrument Serif display type paired with Geist for UI and Geist Mono for numbers and data. Clear hierarchy: one primary action per screen, a live agent roster, tabbed plan views and an Autopilot console that's easy to scan. Screens were refined in Paper (desktop app + MCP) *(team: add Paper file link and screenshots)*.
 
 ## Cognition: Best Use of Devin
-Devin built EventPilot end to end in one session: it read the LA Hacks tracks page, designed the multi-agent architecture, wrote the Next.js app, ran headless browser tests, tuned StepFun cost (reasoning effort and token caps), and shipped every commit to this repo. Devin session: https://app.devin.ai/sessions/deef918ebc6947028bd720579df7586f
+Judged on creativity, novelty and polish. Devin built EventPilot end to end in one session: it read the LA Hacks tracks page, designed the multi-agent architecture, wrote the Next.js app, ran headless-browser end-to-end tests, tuned StepFun cost (reasoning effort, token caps, deterministic budget math) and pushed every commit to this repo. The team set direction (Cal Hacks use case, prize strategy, $25 model budget) and Devin did the planning, coding, testing and shipping.
+Devin session: https://app.devin.ai/sessions/deef918ebc6947028bd720579df7586f

@@ -104,7 +104,8 @@ export type Purchase = {
   category: string;
   purpose: string;
   amount: number;
-  status: "auto_approved" | "pending" | "approved" | "rejected" | "blocked";
+  status: "auto_approved" | "pending" | "approved" | "rejected" | "blocked" | "refunded" | "canceled";
+  why?: string;
   reason: string;
   card?: string; // masked single-use virtual card (simulated)
   ts: number;
@@ -122,7 +123,26 @@ export type OutboxMessage = {
 
 export type AuditEntry = { ts: number; actor: string; action: string; detail: string; prev: string; hash: string };
 
+export type Quote = {
+  vendor: string;
+  price: number;
+  rating: number;
+  leadDays: number;
+  cancellable: boolean;
+  tags: string[];
+  note?: string;
+};
+
+export type Shortlist = {
+  category: string;
+  target: number;
+  quotes: Quote[];
+  pick: number;
+  why: string;
+};
+
 export type Autopilot = {
+  shortlists?: Shortlist[];
   mandate: SpendMandate;
   purchases: Purchase[];
   outbox: OutboxMessage[];

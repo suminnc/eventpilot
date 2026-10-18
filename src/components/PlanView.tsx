@@ -26,11 +26,11 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
           <div>
             <div className="mb-1 flex items-center gap-2 text-xs uppercase tracking-wider text-white/40">
               {b.eventType}
-              <span className={`rounded-full px-2 py-0.5 text-[10px] normal-case tracking-normal ${plan.mode === "llm" ? "bg-violet-500/20 text-violet-200" : "bg-white/10 text-white/60"}`}>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] normal-case tracking-normal ${plan.mode === "llm" ? "bg-accent/15 text-accent-soft" : "bg-white/10 text-white/60"}`}>
                 {plan.mode === "llm" ? plan.model : "offline planner"}
               </span>
             </div>
-            <h2 className="text-2xl font-semibold tracking-tight">{b.title}</h2>
+            <h2 className="font-display text-4xl leading-tight">{b.title}</h2>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-white/60">
               <span className="flex items-center gap-1"><CalendarDays size={14} /> {fmtDate(b.date)} · {b.startTime}</span>
               <span className="flex items-center gap-1"><Clock size={14} /> {b.durationHours}h</span>
@@ -54,7 +54,7 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
             <button key={t} onClick={() => setTab(t)} className={`rounded-lg px-3 py-1.5 text-sm transition ${tab === t ? "bg-white/10 text-white" : "text-white/50 hover:text-white/80"}`}>
               {t}
               {t === "Tasks" && <span className="ml-1 text-white/40">{done}/{plan.tasks.length}</span>}
-              {t === "Autopilot" && <span className="ml-1.5 rounded bg-cyan-500/20 px-1 text-[10px] text-cyan-200">{plan.autopilot?.purchases.some((p) => p.status === "pending") ? "approve" : "new"}</span>}
+              {t === "Autopilot" && <span className="ml-1.5 rounded bg-accent/20 px-1 text-[10px] text-accent-soft">{plan.autopilot?.purchases.some((p) => p.status === "pending") ? "approve" : "new"}</span>}
             </button>
           ))}
         </div>
@@ -63,7 +63,7 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
       <div className="p-5">
         {tab === "Overview" && (
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="md:col-span-2 rounded-xl border border-white/10 bg-gradient-to-br from-violet-500/10 to-sky-500/5 p-4 text-[15px] leading-relaxed text-white/85">{plan.summary}</div>
+            <div className="md:col-span-2 rounded-xl border border-white/10 bg-accent/[0.06] p-4 text-[15px] leading-relaxed text-white/85">{plan.summary}</div>
             <Stat icon={<MapPin size={16} />} label="Venue" value={venue?.name ?? "TBD"} sub={venue?.why} />
             <Stat
               icon={<CloudSun size={16} />}
@@ -94,7 +94,7 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
               const newDay = s.day && (i === 0 || plan.schedule[i - 1].day !== s.day) && plan.schedule.some((x) => (x.day ?? 1) > 1);
               return (
                 <li key={i} className="mb-4 ml-5">
-                  {newDay && <div className="-ml-5 mb-3 text-xs font-semibold uppercase tracking-wider text-violet-300">Day {s.day} · {fmtDate(addDays(b.date, (s.day ?? 1) - 1))}</div>}
+                  {newDay && <div className="-ml-5 mb-3 text-xs font-semibold uppercase tracking-wider text-accent">Day {s.day} · {fmtDate(addDays(b.date, (s.day ?? 1) - 1))}</div>}
                   <span className="absolute -left-[5px] mt-1.5 h-2.5 w-2.5 rounded-full bg-amber-300/80" />
                   <div className="flex flex-wrap items-baseline gap-2">
                     <span className="font-mono text-sm text-amber-200">{s.time}</span>
@@ -116,11 +116,11 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
               <button
                 key={v.name}
                 onClick={() => onChange({ ...plan, selectedVenue: i })}
-                className={`rounded-xl border p-4 text-left transition ${i === plan.selectedVenue ? "border-sky-400/60 bg-sky-500/10" : "border-white/10 bg-black/20 hover:border-white/25"}`}
+                className={`rounded-xl border p-4 text-left transition ${i === plan.selectedVenue ? "border-accent/60 bg-accent/10" : "border-white/10 bg-black/20 hover:border-white/25"}`}
               >
                 <div className="mb-1 flex items-center justify-between">
                   <span className="text-xs text-white/40">{i === 0 ? "Top match" : `Alternate ${i}`}</span>
-                  {i === plan.selectedVenue && <span className="flex items-center gap-1 text-xs text-sky-300"><Check size={12} /> Selected</span>}
+                  {i === plan.selectedVenue && <span className="flex items-center gap-1 text-xs text-accent"><Check size={12} /> Selected</span>}
                 </div>
                 <div className="font-medium">{v.name}</div>
                 <div className="text-sm text-white/50">{v.neighborhood} · {v.style}</div>
@@ -153,7 +153,7 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
         {tab === "Tasks" && (
           <div className="grid gap-2">
             <div className="mb-1 h-1.5 overflow-hidden rounded-full bg-white/10">
-              <div className="h-full bg-gradient-to-r from-violet-500 to-sky-500 transition-all" style={{ width: `${(done / Math.max(1, plan.tasks.length)) * 100}%` }} />
+              <div className="h-full bg-accent transition-all" style={{ width: `${(done / Math.max(1, plan.tasks.length)) * 100}%` }} />
             </div>
             {plan.tasks.map((t) => (
               <label key={t.id} className="flex cursor-pointer items-center gap-3 rounded-lg border border-white/10 bg-black/20 p-3 text-sm hover:border-white/20">
@@ -161,7 +161,7 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
                   type="checkbox"
                   checked={t.done}
                   onChange={() => onChange({ ...plan, tasks: plan.tasks.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)) })}
-                  className="h-4 w-4 accent-violet-500"
+                  className="h-4 w-4 accent-[#ff6a3d]"
                 />
                 <span className={`flex-1 ${t.done ? "text-white/40 line-through" : ""}`}>{t.title}</span>
                 <span className="hidden text-xs sm:inline" style={{ color: AGENTS[t.agent]?.color }}>{AGENTS[t.agent]?.name}</span>
@@ -189,7 +189,7 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
                 <span className="flex items-center gap-1 text-xs uppercase tracking-wider text-white/40"><MessageSquare size={12} /> SMS reminder</span>
                 <CopyBtn text={plan.invite.sms} />
               </div>
-              <div className="rounded-2xl rounded-bl-sm bg-sky-500/20 p-3 text-sm">{plan.invite.sms}</div>
+              <div className="rounded-2xl rounded-bl-sm bg-accent/20 p-3 text-sm">{plan.invite.sms}</div>
               <div className="mt-1 text-right text-[11px] text-white/30">{plan.invite.sms.length}/160</div>
             </div>
           </div>

@@ -36,8 +36,8 @@ export default function Home() {
     <main className="bg-grid min-h-screen">
       <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
         <button onClick={() => window.location.reload()} className="flex items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-violet-500 to-sky-500"><Wand2 size={16} /></span>
-          <span className="text-lg font-semibold tracking-tight">EventPilot</span>
+          <span className="grid h-8 w-8 place-items-center rounded-lg bg-accent text-[#1a0d07]"><Wand2 size={16} /></span>
+          <span className="font-display text-2xl">EventPilot</span>
         </button>
         <span className="hidden text-xs text-white/40 sm:block">Built for LA Hacks · AI Hackathon 2026</span>
       </header>
@@ -45,12 +45,12 @@ export default function Home() {
       {!started ? (
         <section className="mx-auto max-w-3xl px-6 pb-20 pt-10 text-center">
           <div className="mx-auto mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/60">
-            <Sparkles size={12} className="text-violet-300" /> 7 specialist agents · live tools · one prompt
+            <Sparkles size={12} className="text-accent" /> 7 specialist agents · live tools · one prompt
           </div>
-          <h1 className="text-4xl font-semibold tracking-tight sm:text-6xl">
+          <h1 className="font-display text-5xl leading-[1.05] sm:text-7xl">
             Describe your event.
             <br />
-            <span className="bg-gradient-to-r from-violet-300 via-sky-300 to-emerald-300 bg-clip-text text-transparent">Your AI crew plans it.</span>
+            <span className="italic text-accent">Your AI crew runs it.</span>
           </h1>
           <p className="mx-auto mt-4 max-w-xl text-white/60">
             A coordinator delegates to a venue scout, budget analyst, scheduler, logistics lead, comms writer and a critic — and you watch them work in real time.
@@ -68,7 +68,7 @@ export default function Home() {
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-3">
               <div className="flex flex-wrap gap-1.5">
                 {PRESETS.map((p) => (
-                  <button key={p.label} onClick={() => setPrompt(p.prompt)} className={`rounded-full border px-3 py-1 text-xs transition ${prompt === p.prompt ? "border-violet-400/60 bg-violet-500/15 text-white" : "border-white/10 text-white/60 hover:text-white"}`}>
+                  <button key={p.label} onClick={() => setPrompt(p.prompt)} className={`rounded-full border px-3 py-1 text-xs transition ${prompt === p.prompt ? "border-accent/60 bg-accent/10 text-white" : "border-white/10 text-white/60 hover:text-white"}`}>
                     {p.emoji} {p.label}
                   </button>
                 ))}
@@ -142,7 +142,7 @@ export default function Home() {
             ) : (
               <div className="card grid min-h-[420px] place-items-center p-10 text-center text-white/40">
                 <div>
-                  <Bot size={28} className="mx-auto mb-3 animate-pulse text-violet-300" />
+                  <Bot size={28} className="mx-auto mb-3 animate-pulse text-accent" />
                   The crew is assembling your plan…
                 </div>
               </div>

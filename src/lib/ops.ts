@@ -145,6 +145,6 @@ export function opsTasks(ops: OpsPlan, brief: EventBrief): Task[] {
   return finish(list);
 
   function finish(list: [string, number, Task["priority"], string][]): Task[] {
-    return list.map(([title, before, priority, owner], i) => ({ id: `op${i}`, title, due: due(before), owner, priority, done: false, agent: "logistics" }));
+    return list.map(([title, before, priority, owner], i) => ({ id: `op${i}`, title, due: due(before), owner, priority, done: false, agent: "logistics_lead" }));
   }
 }

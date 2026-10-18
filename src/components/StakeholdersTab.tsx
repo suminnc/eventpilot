@@ -11,7 +11,7 @@ export function StakeholdersTab({ plan, onChange }: { plan: EventPlan; onChange:
   const titles = new Set(plan.tasks.map((t) => t.title));
   const addTask = (title: string, high: boolean) => {
     const due = new Date(Math.min(Date.now() + 3 * 864e5, Math.max(Date.now(), new Date(plan.brief.date).getTime() - 864e5))).toISOString().slice(0, 10);
-    const task: Task = { id: `sh-${plan.tasks.length}-${Date.now().toString(36)}`, title, due, owner: "Organizer", priority: high ? "high" : "medium", done: false, agent: "critic" };
+    const task: Task = { id: `sh-${plan.tasks.length}-${Date.now().toString(36)}`, title, due, owner: "Organizer", priority: high ? "high" : "medium", done: false, agent: "verifier" };
     onChange({ ...plan, tasks: [...plan.tasks, task] });
   };
   return (

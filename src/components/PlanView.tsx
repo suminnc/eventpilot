@@ -10,6 +10,7 @@ import { planToICS, planToMarkdown } from "@/lib/export";
 import { AutopilotPanel } from "./AutopilotPanel";
 import { reselectVenue } from "@/lib/replan";
 import { ActionPlanTab } from "./ActionPlanTab";
+import { buildWorkflow } from "@/lib/workflow";
 import { SwarmTab } from "./SwarmTab";
 
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
@@ -28,6 +29,8 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
   const b = plan.brief;
   const venue = plan.venues[plan.selectedVenue];
   const done = plan.tasks.filter((t) => t.done).length;
+  const gates = buildWorkflow(plan).gates;
+  const steps = { done: done + gates.filter((g) => g.status === "done").length, total: plan.tasks.length + gates.length };
   const pending = plan.autopilot?.purchases.some((p) => p.status === "pending");
 
   return (
@@ -71,7 +74,7 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
             className={`-mb-px flex shrink-0 items-center border-b-2 pb-3 text-sm transition ${tab === t ? "border-foreground font-semibold text-foreground" : "border-transparent font-medium text-muted hover:text-foreground"}`}
           >
             {t}
-            {t === "Plan of action" && <span className="ml-1.5 font-mono text-xs text-subtle">{done}/{plan.tasks.length}</span>}
+            {t === "Plan of action" && <span className="ml-1.5 font-mono text-xs text-subtle">{steps.done}/{steps.total}</span>}
             {t === "Permits" && (plan.permits?.length ?? 0) > 0 && <span className="ml-1.5 font-mono text-xs text-subtle">{plan.permits!.filter((p) => plan.tasks.find((x) => x.id === p.taskId)?.done).length}/{plan.permits!.length}</span>}
             {t === "Autopilot" && (
               <span className={`ml-1.5 rounded-lg px-1.5 py-px text-[11px] font-semibold ${pending ? "bg-warning-soft text-warning" : "bg-accent-soft text-accent"}`}>

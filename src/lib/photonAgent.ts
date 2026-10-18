@@ -1,12 +1,12 @@
 import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import path from "path";
-import type { EventPlan, OutboxMessage, TextMessage } from "./types";
+import type { EventPlan, TextMessage } from "./types";
 import { discoverLink, isLinked, organizerReplies, photonConfig, textOrganizer } from "./photon";
 import { applyReply, decisionText, planContext, refNum, untexted } from "./decisions";
 import { mailConfig, sendEmail } from "./mailer";
 import { fetchReplies } from "./mailbox";
 import { answerVendor, interpret, matchThread, openThread, respond, followUps, settle, threadsText, type Effects } from "./vendorDeals";
-import { sendMessage, appendAudit, committed, defaultMandate, emptyAutopilot, negotiatedSavings, planSteps } from "./autopilot";
+import { sendMessage, isAutoDraft, appendAudit, committed, defaultMandate, emptyAutopilot, negotiatedSavings, planSteps } from "./autopilot";
 import { runPlanner } from "./agents/orchestrator";
 import { answerQuestion } from "./answer";
 import { getLLMConfig } from "./llm";
@@ -373,7 +373,6 @@ export async function sendOutbox(planId: string, id: string): Promise<{ ok: bool
 // ---- Autonomous mode: the Ops Team runs a new plan end to end; only money approvals go to the organizer ----
 
 const autonomous = () => process.env.AUTONOMOUS !== "0" && !!mailConfig();
-const isAutoDraft = (m: OutboxMessage) => m.status === "draft" && m.channel === "email" && (/^(bookings|events)@/.test(m.to) || /Permit application/.test(m.subject));
 
 async function autoRun(planId: string) {
   const a = agent();

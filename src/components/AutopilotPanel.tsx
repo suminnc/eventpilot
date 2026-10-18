@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { Check, CreditCard, Loader2, Lock, Mail, MessageSquare, Play, Receipt, RotateCcw, Search, ShieldCheck, ShieldX, Star, X } from "lucide-react";
 import type { EventPlan, SpendMandate, VendorThread } from "@/lib/types";
 import { OrganizerTexts } from "./OrganizerTexts";
-import { committed, decide, defaultMandate, emptyAutopilot, negotiatedSavings, planSteps, refund, sendMessage, switchQuote, verifyAudit } from "@/lib/autopilot";
+import { committed, decide, defaultMandate, emptyAutopilot, isAutoDraft, negotiatedSavings, planSteps, refund, sendMessage, switchQuote, verifyAudit } from "@/lib/autopilot";
 
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 const STATUS: Record<string, string> = {
@@ -298,5 +298,18 @@ export async function runAutopilot(plan: EventPlan, mandate: SpendMandate, mailL
     ({ a: state, plan: p } = step.apply(state, p));
     onChange({ ...p, autopilot: state });
     await new Promise((r) => setTimeout(r, 260));
+  }
+  // Send vendor emails and permit filings: real email (redirected to the test inbox) when mail is live, simulated otherwise.
+  p = { ...p, autopilot: state };
+  for (const m of state.outbox.filter(isAutoDraft)) {
+    onStep(`Autopilot: ${mailLive ? "email" : "send (simulated, email is off)"} → ${m.to}`);
+    if (mailLive) {
+      const r = await fetch("/api/email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ planId: p.id, outboxId: m.id, to: m.to, subject: m.subject, body: m.body, title: p.brief.title }) }).then((x) => x.json()).catch(() => ({ ok: false }));
+      if (r.plan) p = r.plan;
+      else if (!r.ok) continue;
+      else p = sendMessage(p, m.id, "autopilot");
+    } else p = sendMessage(p, m.id, "autopilot", " (simulated: email is off)");
+    onChange(p);
+    await new Promise((r) => setTimeout(r, 200));
   }
 }

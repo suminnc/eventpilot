@@ -149,9 +149,13 @@ export type Permit = {
   taskId?: string;
 };
 
+export type Round = { by: "agent" | "vendor"; price: number; note: string };
+
 export type Quote = {
   vendor: string;
   price: number;
+  listPrice?: number;
+  rounds?: Round[];
   rating: number;
   leadDays: number;
   cancellable: boolean;
@@ -165,6 +169,7 @@ export type Shortlist = {
   quotes: Quote[];
   pick: number;
   why: string;
+  negotiated?: boolean;
 };
 
 export type TextMessage = {

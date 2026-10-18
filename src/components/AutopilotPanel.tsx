@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Check, CreditCard, Loader2, Lock, Mail, MessageSquare, Play, Receipt, RotateCcw, Search, ShieldCheck, ShieldX, Star, X } from "lucide-react";
 import type { EventPlan, SpendMandate } from "@/lib/types";
 import { OrganizerTexts } from "./OrganizerTexts";
-import { committed, decide, defaultMandate, emptyAutopilot, planSteps, refund, sendMessage, switchQuote, verifyAudit } from "@/lib/autopilot";
+import { committed, decide, defaultMandate, emptyAutopilot, negotiatedSavings, planSteps, refund, sendMessage, switchQuote, verifyAudit } from "@/lib/autopilot";
 
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 const STATUS: Record<string, string> = {
@@ -116,7 +116,7 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
 
           {(a.shortlists?.length ?? 0) > 0 && (
             <section>
-              <h3 className="section-head"><Search size={14} /> What the agent compared</h3>
+              <h3 className="section-head"><Search size={14} /> What the agent compared{negotiatedSavings(a) > 0 && <span className="ml-auto font-mono text-xs font-medium normal-case tracking-normal text-success">negotiated {money(negotiatedSavings(a))} off</span>}</h3>
               <div className="grid grid-cols-[minmax(0,1fr)] gap-6 pt-4 lg:grid-cols-3">
                 {a.shortlists!.map((sl) => (
                   <div key={sl.category} className="flex min-w-0 flex-col gap-2">
@@ -128,7 +128,10 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
                       <div key={q.vendor} className={`flex flex-col gap-0.5 rounded-xl px-3 py-2.5 text-xs ${i === sl.pick ? "border-[1.5px] border-accent bg-accent-soft" : "border border-line"}`}>
                         <div className="flex items-center justify-between gap-2">
                           <span className={`min-w-0 truncate text-[13px] text-foreground ${i === sl.pick ? "font-semibold" : "font-medium"}`}>{q.vendor}</span>
-                          <span className={`shrink-0 whitespace-nowrap font-mono text-[13px] text-foreground ${i === sl.pick ? "font-semibold" : ""}`}>{money(q.price)}</span>
+                          <span className={`shrink-0 whitespace-nowrap font-mono text-[13px] text-foreground ${i === sl.pick ? "font-semibold" : ""}`}>
+                            {q.listPrice && q.listPrice > q.price && <span className="mr-1.5 font-normal text-subtle line-through">{money(q.listPrice)}</span>}
+                            {money(q.price)}
+                          </span>
                         </div>
                         <div className="flex flex-wrap items-center gap-x-1.5 text-muted">
                           <span className="flex items-center gap-0.5"><Star size={10} className="fill-current" />{q.rating}</span>
@@ -136,6 +139,16 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
                           <span>· {q.cancellable ? "free cancel" : "non-refundable"}</span>
                         </div>
                         {q.note && <div className="text-muted">{q.note}</div>}
+                        {q.rounds && (
+                          <details className="mt-0.5">
+                            <summary className="cursor-pointer list-none text-[11px] font-medium text-success">
+                              Negotiated {q.listPrice && q.listPrice > q.price ? `−${Math.round(((q.listPrice - q.price) / q.listPrice) * 100)}%` : "at list"} · {q.rounds.length} messages
+                            </summary>
+                            <ol className="mt-1 grid grid-cols-[minmax(0,1fr)] gap-0.5 border-l border-line pl-2 text-[11px] text-muted">
+                              {q.rounds.map((r, j) => <li key={j}><span className="font-medium text-foreground">{r.by === "agent" ? "Agent" : "Vendor"}:</span> {r.note}</li>)}
+                            </ol>
+                          </details>
+                        )}
                         <div className="pt-1">
                           {i === sl.pick ? (
                             <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-accent">Agent pick</span>
@@ -151,6 +164,7 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
                   </div>
                 ))}
               </div>
+              <p className="mt-3 text-[11px] text-subtle">Negotiation is simulated: each demo vendor has a hidden floor price. The agent never goes below it, and only haggles with vendors that can deliver in time.</p>
             </section>
           )}
 

@@ -1,4 +1,4 @@
-import type { AuditEntry, Autopilot, EventBrief, EventPlan, OutboxMessage, Purchase, Quote, Shortlist, SpendMandate } from "./types";
+import type { AuditEntry, Autopilot, EventBrief, EventPlan, OutboxMessage, Purchase, Quote, Round, Shortlist, SpendMandate } from "./types";
 
 /**
  * Autopilot: turns a plan into executed actions (outreach + guarded purchases).
@@ -110,22 +110,33 @@ export function planSteps(plan: EventPlan, mandate: SpendMandate): AutopilotStep
   }
 
   for (const v of plan.vendors) {
-    const sl = shortlist(b, v.category, v.estCost);
+    const listed = shortlist(b, v.category, v.estCost);
+    const sl = negotiateShortlist(b, listed);
     const q = sl.quotes[sl.pick];
+    const haggled = sl.quotes.filter((x) => x.rounds);
     steps.push({
-      label: `Shopper: compared ${sl.quotes.length} ${v.category} quotes → ${q.vendor} (${money(q.price)})`,
+      label: `Shopper: compared ${listed.quotes.length} ${v.category} quotes → ${listed.quotes[listed.pick].vendor} (${money(listed.quotes[listed.pick].price)} list)`,
       apply: (a, p) =>
         a.shortlists?.some((x) => x.category === v.category) ? { a, plan: p } : ({
-        a: { ...a, shortlists: [...(a.shortlists ?? []), sl], audit: appendAudit(a.audit, "shopper", "shortlist", `${v.category}: ${sl.why}`) },
+        a: { ...a, shortlists: [...(a.shortlists ?? []), listed], audit: appendAudit(a.audit, "shopper", "shortlist", `${v.category}: ${listed.why}`) },
         plan: p,
       }),
+    });
+    steps.push({
+      label: `Negotiator: haggled with ${haggled.length} ${v.category} vendors → ${q.vendor} ${money(q.price)}${q.listPrice && q.listPrice > q.price ? ` (saved ${money(q.listPrice - q.price)})` : ""}`,
+      apply: (a, p) => {
+        const cur = a.shortlists?.find((x) => x.category === v.category);
+        if (cur?.negotiated || a.purchases.some((x) => x.category === v.category && LIVE.includes(x.status))) return { a, plan: p };
+        const detail = `${v.category}: ${haggled.map((x) => `${x.vendor} ${money(x.listPrice!)}→${money(x.price)}`).join("; ")}. Pick: ${q.vendor}.`;
+        return { a: { ...a, shortlists: [...(a.shortlists ?? []).filter((x) => x.category !== v.category), sl], audit: appendAudit(a.audit, "negotiator", "negotiate", detail) }, plan: p };
+      },
     });
     const book = msg(
         {
           channel: "email",
           to: `bookings@${slug(q.vendor)}.com`,
           subject: `Booking: ${v.category} for ${b.title} (${b.guests.toLocaleString()} guests, ${b.date})`,
-          body: `Hi ${q.vendor} team,\n\nWe'd like to book ${v.suggestion.toLowerCase()} for ${b.title} in ${b.city} on ${b.date}, based on your quote of ${money(q.price)}.\n${v.contactTip}\n\nWe'll pay a 25% deposit by virtual card today. Please confirm availability and send your contract.`,
+          body: `Hi ${q.vendor} team,\n\nWe'd like to book ${v.suggestion.toLowerCase()} for ${b.title} in ${b.city} on ${b.date}, at the ${money(q.price)} we agreed${q.listPrice && q.listPrice > q.price ? ` (down from your ${money(q.listPrice)} list price)` : ""}.\n${v.contactTip}\n\nWe'll pay a 25% deposit by virtual card today. Please confirm availability and send your contract.`,
           taskId: findTask(new RegExp(v.category, "i")),
         },
         "logistics",
@@ -255,12 +266,16 @@ const daysUntil = (date: string) => Math.ceil((new Date(`${date}T00:00:00`).getT
 /** Discovery + decision: gathers 3 quotes for a category and picks one, scored against the brief. */
 export function shortlist(brief: EventBrief, category: string, target: number): Shortlist {
   const names = MERCHANTS[category] ?? ([["Partners", []], ["Budget Co.", ["budget"]], ["Premier", []], ["Collective", []], ["Express", []], ["Local", ["budget"]]] as [string, string[]][]).map(([n, t]) => [`${category} ${n}`, t] as [string, string[]]);
-  const needs = `${brief.constraints.join(" ")} ${brief.vibe}`.toLowerCase();
-  const days = daysUntil(brief.date);
   const quotes: Quote[] = names.map(([vendor, tags], i) => {
     const sh = SHAPES[(i + fnv(category).charCodeAt(0)) % SHAPES.length];
     return { vendor, tags, price: Math.round((target * sh.mult) / 50) * 50, rating: sh.rating, leadDays: sh.leadDays, cancellable: sh.cancellable };
   });
+  return { category, target, quotes, ...choose(brief, target, quotes) };
+}
+
+function choose(brief: EventBrief, target: number, quotes: Quote[]): Pick<Shortlist, "pick" | "why"> {
+  const needs = `${brief.constraints.join(" ")} ${brief.vibe}`.toLowerCase();
+  const days = daysUntil(brief.date);
   const scored = quotes.map((q) => {
     const fit = q.tags.filter((t) => needs.includes(t.split(" ")[0]));
     const late = days < q.leadDays;
@@ -281,7 +296,62 @@ export function shortlist(brief: EventBrief, category: string, target: number): 
   ].filter(Boolean);
   const cheaper = scored.find((s) => s !== best && s.q.price < best.q.price);
   const tradeoff = cheaper ? ` ${cheaper.q.vendor} was ${money(best.q.price - cheaper.q.price)} cheaper but ${cheaper.late ? "can't deliver in time" : cheaper.q.cancellable ? "rated lower" : "has no cancellation window"}.` : "";
-  return { category, target, quotes, pick, why: `Picked ${best.q.vendor}: ${reasons.join(", ")}.${tradeoff}` };
+  return { pick, why: `Picked ${best.q.vendor}: ${reasons.join(", ")}.${tradeoff}` };
+}
+
+const r50 = (n: number) => Math.round(n / 50) * 50;
+
+/** One simulated vendor negotiation. Each demo vendor has a hidden floor (2–18% under list); the agent anchors low with competing quotes as leverage and never goes below the floor. */
+function haggle(q: Quote, rival?: Quote): Quote {
+  const list = q.price;
+  const margin = Math.max(0.02, 0.05 + (parseInt(fnv(`${q.vendor}|floor`).slice(0, 4), 16) / 0xffff) * 0.13 - (q.rating >= 4.7 ? 0.03 : 0));
+  const floor = r50(list * (1 - margin));
+  const ask1 = r50(rival ? Math.max(rival.price, list * 0.8) : list * 0.85);
+  const rounds: Round[] = [{ by: "agent", price: ask1, note: rival ? `Asked ${money(ask1)}, citing ${rival.vendor}'s ${money(rival.price)} quote` : `Asked ${money(ask1)} (15% off list)` }];
+  let final = floor;
+  if (floor <= ask1) {
+    final = ask1;
+    rounds.push({ by: "vendor", price: ask1, note: `Accepted ${money(ask1)}` });
+  } else {
+    const counter = r50(Math.max(floor, list - (list - ask1) * 0.4));
+    if (counter <= floor) {
+      rounds.push({ by: "vendor", price: floor, note: `Countered ${money(floor)}, best and final` }, { by: "agent", price: floor, note: `Accepted ${money(floor)}` });
+    } else {
+      const ask2 = r50((ask1 + counter) / 2);
+      rounds.push({ by: "vendor", price: counter, note: `Countered ${money(counter)}` }, { by: "agent", price: ask2, note: `Offered ${money(ask2)} to meet in the middle` });
+      if (floor <= ask2) {
+        final = ask2;
+        rounds.push({ by: "vendor", price: ask2, note: `Accepted ${money(ask2)}` });
+      } else {
+        rounds.push({ by: "vendor", price: floor, note: `Best and final: ${money(floor)}` }, { by: "agent", price: floor, note: `Accepted ${money(floor)}` });
+      }
+    }
+  }
+  return { ...q, listPrice: list, price: Math.min(final, list), rounds };
+}
+
+/** Negotiator: haggles with every vendor that can deliver in time, then re-picks on the negotiated prices (fit still counts, so it won't trade away diets or lead time for price). */
+export function negotiateShortlist(brief: EventBrief, sl: Shortlist): Shortlist {
+  if (sl.negotiated) return sl;
+  const days = daysUntil(brief.date);
+  const ok = (q: Quote) => days >= q.leadDays;
+  const quotes = sl.quotes.map((q) => {
+    if (!ok(q)) return q;
+    const rival = sl.quotes.filter((x) => x !== q && ok(x) && x.price < q.price).sort((x, y) => x.price - y.price)[0];
+    return haggle(q, rival);
+  });
+  const c = choose(brief, sl.target, quotes);
+  const p = quotes[c.pick];
+  const saved = p.listPrice ? p.listPrice - p.price : 0;
+  return { ...sl, quotes, ...c, why: `${c.why}${saved > 0 ? ` Negotiated ${p.vendor} down from ${money(p.listPrice!)} to ${money(p.price)}, saving ${money(saved)}.` : ""}`, negotiated: true };
+}
+
+/** Total saved by negotiation on the current picks. */
+export function negotiatedSavings(a: Autopilot): number {
+  return (a.shortlists ?? []).reduce((s, sl) => {
+    const q = sl.quotes[sl.pick];
+    return s + (q.listPrice ? Math.max(0, q.listPrice - q.price) : 0);
+  }, 0);
 }
 
 const LIVE = ["auto_approved", "approved", "pending"];

@@ -3,7 +3,7 @@ import { useState } from "react";
 import Image from "next/image";
 import {
   FileCheck2,
-  CalendarDays, Copy, Download, FileText, MapPin, MessageSquare, ShieldAlert, Users, Wallet, CloudSun, Clock, Star, Check,
+  CalendarDays, Copy, Download, FileText, MapPin, MessageSquare, ShieldAlert, Users, Wallet, CloudSun, Clock, Check,
 } from "lucide-react";
 import type { EventPlan } from "@/lib/types";
 import { planToICS, planToMarkdown } from "@/lib/export";
@@ -63,7 +63,6 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
           <span className="flex items-center gap-1.5 font-mono"><Wallet size={15} className="text-muted" /> {money(b.budget)}</span>
           <span className="flex items-center gap-1.5"><MapPin size={15} className="text-muted" /> {venue?.name ?? b.city}</span>
         </div>
-        <Score score={plan.score} />
       </div>
 
       <div className="mt-5 flex gap-6 overflow-x-auto border-b border-line">
@@ -283,17 +282,6 @@ function Stat({ icon, label, value, sub }: { icon: React.ReactNode; label: strin
       <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">{icon} {label}</div>
       <div className="text-base font-semibold text-foreground">{value}</div>
       {sub && <div className="text-sm leading-[21px] text-muted">{sub}</div>}
-    </div>
-  );
-}
-
-function Score({ score }: { score: number }) {
-  const tone = score >= 80 ? "bg-success-soft text-success" : score >= 60 ? "bg-warning-soft text-warning" : "bg-danger-soft text-danger";
-  return (
-    <div className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 ${tone}`} title="Critic's confidence in this plan">
-      <Star size={13} className="fill-current" />
-      <span className="font-mono text-sm font-semibold">{score}</span>
-      <span className="text-xs">/100</span>
     </div>
   );
 }

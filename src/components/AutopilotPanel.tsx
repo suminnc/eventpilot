@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { Check, CreditCard, Loader2, Lock, Mail, MessageSquare, Play, Receipt, RotateCcw, Search, ShieldCheck, ShieldX, Star, X } from "lucide-react";
 import type { EventPlan, SpendMandate, VendorThread } from "@/lib/types";
 import { OrganizerTexts } from "./OrganizerTexts";
@@ -114,53 +114,7 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
           {(a.shortlists?.length ?? 0) > 0 && (
             <section>
               <h3 className="section-head"><Search size={14} /> What the agent compared{negotiatedSavings(a) > 0 && <span className="ml-auto font-mono text-xs font-medium normal-case tracking-normal text-success">negotiated {money(negotiatedSavings(a))} off</span>}</h3>
-              <div className="grid grid-cols-[minmax(0,1fr)] gap-6 pt-4 lg:grid-cols-3">
-                {a.shortlists!.map((sl) => (
-                  <div key={sl.category} className="flex min-w-0 flex-col gap-2">
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-[15px] font-semibold text-foreground">{sl.category}</span>
-                      <span className="font-mono text-xs text-subtle">target {money(sl.target)}</span>
-                    </div>
-                    {sl.quotes.map((q, i) => (
-                      <div key={q.vendor} className={`flex flex-col gap-0.5 rounded-xl px-3 py-2.5 text-xs ${i === sl.pick ? "border-[1.5px] border-accent bg-accent-soft" : "border border-line"}`}>
-                        <div className="flex items-center justify-between gap-2">
-                          <span className={`min-w-0 truncate text-[13px] text-foreground ${i === sl.pick ? "font-semibold" : "font-medium"}`}>{q.vendor}</span>
-                          <span className={`shrink-0 whitespace-nowrap font-mono text-[13px] text-foreground ${i === sl.pick ? "font-semibold" : ""}`}>
-                            {q.listPrice && q.listPrice > q.price && <span className="mr-1.5 font-normal text-subtle line-through">{money(q.listPrice)}</span>}
-                            {money(q.price)}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-x-1.5 text-muted">
-                          <span className="flex items-center gap-0.5"><Star size={10} className="fill-current" />{q.rating}</span>
-                          <span>· {q.leadDays}d lead</span>
-                          <span>· {q.cancellable ? "free cancel" : "non-refundable"}</span>
-                        </div>
-                        {q.note && <div className="text-muted">{q.note}</div>}
-                        {q.rounds && (
-                          <details className="mt-0.5">
-                            <summary className="cursor-pointer list-none text-[11px] font-medium text-success">
-                              Negotiated {q.listPrice && q.listPrice > q.price ? `−${Math.round(((q.listPrice - q.price) / q.listPrice) * 100)}%` : "at list"} · {q.rounds.length} messages
-                            </summary>
-                            <ol className="mt-1 grid grid-cols-[minmax(0,1fr)] gap-0.5 border-l border-line pl-2 text-[11px] text-muted">
-                              {q.rounds.map((r, j) => <li key={j}><span className="font-medium text-foreground">{r.by === "agent" ? "Agent" : "Vendor"}:</span> {r.note}</li>)}
-                            </ol>
-                          </details>
-                        )}
-                        <div className="pt-1">
-                          {i === sl.pick ? (
-                            <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-accent">Agent pick</span>
-                          ) : (
-                            <button disabled={running} onClick={() => onChange(switchQuote(plan, sl.category, i))} className="text-xs font-medium text-accent underline-offset-2 hover:underline disabled:opacity-40">
-                              Choose this instead
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                    <p className="text-xs leading-[18px] text-muted">{sl.why}</p>
-                  </div>
-                ))}
-              </div>
+              <VendorCompare plan={plan} onChange={onChange} running={running} />
               <p className="mt-3 text-[11px] text-subtle">Negotiation is simulated: each demo vendor has a hidden floor price. The agent never goes below it, and only haggles with vendors that can deliver in time.</p>
             </section>
           )}
@@ -312,4 +266,89 @@ export async function runAutopilot(plan: EventPlan, mandate: SpendMandate, mailL
     onChange(p);
     await new Promise((r) => setTimeout(r, 200));
   }
+}
+
+function VendorCompare({ plan, onChange, running }: { plan: EventPlan; onChange: (p: EventPlan) => void; running: boolean }) {
+  const lists = plan.autopilot?.shortlists ?? [];
+  const [sel, setSel] = useState(0);
+  const idx = Math.min(sel, lists.length - 1);
+  const btns = useRef<(HTMLButtonElement | null)[]>([]);
+  const [pill, setPill] = useState({ left: 0, width: 0 });
+  useLayoutEffect(() => {
+    const place = () => {
+      const b = btns.current[idx];
+      if (b) setPill({ left: b.offsetLeft, width: b.offsetWidth });
+    };
+    place();
+    btns.current[idx]?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [idx, lists.length]);
+  if (!lists.length) return null;
+  const sl = lists[idx];
+  return (
+    <div className="pt-4">
+      <div role="tablist" aria-label="Vendor categories" className="relative flex gap-1 overflow-x-auto rounded-xl bg-surface p-1">
+        <span aria-hidden className="absolute bottom-1 top-1 rounded-lg bg-background shadow-sm ring-1 ring-line transition-all duration-300 ease-out" style={{ left: pill.left, width: pill.width }} />
+        {lists.map((l, i) => (
+          <button
+            key={l.category}
+            ref={(el) => { btns.current[i] = el; }}
+            role="tab"
+            aria-selected={i === idx}
+            onClick={() => setSel(i)}
+            className={`relative z-10 flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] transition-colors duration-300 ${i === idx ? "font-semibold text-foreground" : "font-medium text-muted hover:text-foreground"}`}
+          >
+            {l.category}
+            <span className="font-mono text-[11px] font-normal text-subtle">{money(l.quotes[l.pick]?.price ?? 0)}</span>
+          </button>
+        ))}
+      </div>
+      <div key={sl.category} role="tabpanel" className="fade-up mt-4 flex min-w-0 flex-col gap-2">
+        <div className="flex items-baseline justify-between">
+          <span className="text-[15px] font-semibold text-foreground">{sl.category} · {sl.quotes.length} quotes</span>
+          <span className="font-mono text-xs text-subtle">target {money(sl.target)}</span>
+        </div>
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {sl.quotes.map((q, i) => (
+            <div key={q.vendor} className={`flex flex-col gap-0.5 rounded-xl px-3 py-2.5 text-xs ${i === sl.pick ? "border-[1.5px] border-accent bg-accent-soft" : "border border-line"}`}>
+              <div className="flex items-center justify-between gap-2">
+                <span className={`min-w-0 truncate text-[13px] text-foreground ${i === sl.pick ? "font-semibold" : "font-medium"}`}>{q.vendor}</span>
+                <span className={`shrink-0 whitespace-nowrap font-mono text-[13px] text-foreground ${i === sl.pick ? "font-semibold" : ""}`}>
+                  {q.listPrice && q.listPrice > q.price && <span className="mr-1.5 font-normal text-subtle line-through">{money(q.listPrice)}</span>}
+                  {money(q.price)}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-1.5 text-muted">
+                <span className="flex items-center gap-0.5"><Star size={10} className="fill-current" />{q.rating}</span>
+                <span>· {q.leadDays}d lead</span>
+                <span>· {q.cancellable ? "free cancel" : "non-refundable"}</span>
+              </div>
+              {q.note && <div className="text-muted">{q.note}</div>}
+              {q.rounds && (
+                <details className="mt-0.5">
+                  <summary className="cursor-pointer list-none text-[11px] font-medium text-success">
+                    Negotiated {q.listPrice && q.listPrice > q.price ? `−${Math.round(((q.listPrice - q.price) / q.listPrice) * 100)}%` : "at list"} · {q.rounds.length} messages
+                  </summary>
+                  <ol className="mt-1 grid grid-cols-[minmax(0,1fr)] gap-0.5 border-l border-line pl-2 text-[11px] text-muted">
+                    {q.rounds.map((r, j) => <li key={j}><span className="font-medium text-foreground">{r.by === "agent" ? "Agent" : "Vendor"}:</span> {r.note}</li>)}
+                  </ol>
+                </details>
+              )}
+              <div className="pt-1">
+                {i === sl.pick ? (
+                  <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-accent">Agent pick</span>
+                ) : (
+                  <button disabled={running} onClick={() => onChange(switchQuote(plan, sl.category, i))} className="text-xs font-medium text-accent underline-offset-2 hover:underline disabled:opacity-40">
+                    Choose this instead
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs leading-[18px] text-muted">{sl.why}</p>
+      </div>
+    </div>
+  );
 }

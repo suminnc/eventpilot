@@ -1,6 +1,6 @@
 import { chatJSON, getLLMConfig, type LLMConfig } from "../llm";
 import { applyFeedbackOffline, parseBriefOffline } from "../parse";
-import { billableHours, venueSearchTool, weatherTool } from "../tools";
+import { namePattern, billableHours, venueSearchTool, weatherTool } from "../tools";
 import { linkPermitTasks, permitChecklist } from "../permits";
 import { allocateBudget } from "../budget";
 import { opsPlan, opsTasks } from "../ops";
@@ -119,13 +119,16 @@ async function scout(ctx: Ctx, brief: EventBrief): Promise<Venue[]> {
       async (llm) => {
         const out = await chatJSON<{ venues: { name: string; why: string }[] }>(
           llm,
-          `You are the Venue Scout agent. Rank the candidate venues best-first for the brief and write a punchy 1-2 sentence "why" for each referencing capacity, cost, and vibe. Return {"venues":[{"name","why"}]} using only the given names.`,
+          `You are the Venue Scout agent. Rank the candidate venues best-first for the brief and write a punchy 1-2 sentence "why" for each referencing capacity, cost, and vibe. If the brief names a specific venue, rank it first. Return {"venues":[{"name","why"}]} using only the given names.`,
           `Brief: ${briefJSON(brief)}${fb(ctx)}\nCandidates: ${JSON.stringify(found)}`,
         );
         const ranked = out.venues
           .map((o) => { const v = found.find((f) => f.name === o.name); return v && { ...v, why: o.why }; })
           .filter(Boolean) as Venue[];
-        return ranked.length ? ranked : found.map((v) => ({ ...v, why: offlineWhy(v, brief, maxHourly) }));
+        const list = ranked.length ? ranked : found.map((v) => ({ ...v, why: offlineWhy(v, brief, maxHourly) }));
+        const asked = list.findIndex((v) => namePattern(v.name).test(brief.prompt.toLowerCase()));
+        if (asked > 0) think(ctx, "scout", `The brief names ${list[asked].name}, so it stays the top pick.`);
+        return asked > 0 ? [list[asked], ...list.filter((_, i) => i !== asked)] : list;
       });
   }, (v) => `Top pick: ${v[0]?.name ?? "none"} (+${Math.max(0, v.length - 1)} alternates)`);
 }

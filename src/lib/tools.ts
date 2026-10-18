@@ -132,7 +132,7 @@ export function venueSearchTool(city: string, eventType: string, vibe: string, g
 }
 
 /** Matches a venue named in free text by its first two distinctive words, e.g. "Palace of Fine Arts" or "Pier 27". */
-function namePattern(name: string) {
+export function namePattern(name: string) {
   const words = name.toLowerCase().split(/\s+/).filter((w) => /^[a-z0-9]+$/.test(w) && !/^(of|at|the|a|and)$/.test(w));
   return new RegExp(`\\b${words.slice(0, 2).join("\\W+(?:\\w+\\W+){0,2}")}\\b`);
 }

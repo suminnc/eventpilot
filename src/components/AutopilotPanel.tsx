@@ -36,6 +36,7 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
   const pending = a?.purchases.filter((x) => x.status === "pending") ?? [];
   const spent = a ? committed(a.purchases) : 0;
   const intact = a ? verifyAudit(a.audit) : true;
+  const loose = a ? a.outbox.filter((m) => m.channel === "email" && !a.threads?.some((t) => t.subject === m.subject)) : [];
 
   return (
     <div className="flex min-w-0 flex-col gap-8 [overflow-wrap:anywhere]">
@@ -154,10 +155,10 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
                 </div>
               ))}
             </section>
-            {a.threads?.length ? (
+            {(a.threads?.length || loose.length) ? (
               <section>
-                <h3 className="section-head"><Mail size={14} /> Vendor conversations</h3>
-                {a.threads.map((t) => (
+                <h3 className="section-head"><Mail size={14} /> Email conversations<span className="ml-auto font-mono text-xs font-medium normal-case tracking-normal text-muted">{(a.threads?.length ?? 0) + loose.length}</span></h3>
+                {(a.threads ?? []).map((t) => (
                   <details key={t.id} className="group border-b border-line py-3 text-sm">
                     <summary className="flex cursor-pointer list-none items-center gap-2">
                       <span className="min-w-0 flex-1 truncate text-foreground">{t.vendor} <span className="text-muted">· {t.category}</span></span>
@@ -173,6 +174,16 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
                         </li>
                       ))}
                     </ol>
+                  </details>
+                ))}
+                {loose.map((m) => (
+                  <details key={m.id} className="group border-b border-line py-3 text-sm">
+                    <summary className="flex cursor-pointer list-none items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate text-foreground">{m.subject}</span>
+                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${m.status === "sent" ? "bg-accent-soft text-accent" : "bg-surface text-muted"}`}>{m.status === "sent" ? "Sent · awaiting reply" : "Drafted"}</span>
+                    </summary>
+                    <div className="mt-2 text-xs text-subtle">To: {m.to}</div>
+                    <pre className="mt-1 whitespace-pre-wrap font-sans text-xs leading-relaxed text-muted">{m.body}</pre>
                   </details>
                 ))}
               </section>

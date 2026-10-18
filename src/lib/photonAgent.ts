@@ -305,7 +305,7 @@ export async function handleInbound(text: string, id: string) {
     setPlan({ ...p, dayops: { ...o, postmortemAt: localIso(new Date()) } });
     return reply(`${report.slice(0, 1400)}${report.length > 1400 ? "\n…full report on the website." : ""}`);
   }
-  const rbM = t.match(/^reimburse(?:ment)?\s+\$?([\d,]+(?:\.\d{1,2})?)\s+(?:(?:at|from|to)\s+)?(\S+(?:\s\S+)?)\s*(?:for\s+)?([\s\S]*)$/i);
+  const rbM = t.match(/^reimburse(?:ment)?\s+\$?([\d,]+(?:\.\d{1,2})?)\s+(?:(?:at|from|to)\s+)?(\S+)\s*(?:for\s+)?([\s\S]*)$/i);
   if (rbM) {
     const amount = parseFloat(rbM[1].replace(/,/g, ""));
     const f = p.finance ?? syncFinance(p);

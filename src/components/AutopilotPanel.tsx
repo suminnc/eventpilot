@@ -29,14 +29,7 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
   const run = async () => {
     setRunning(true);
     setFeed([]);
-    let state = plan.autopilot ? { ...plan.autopilot, mandate } : emptyAutopilot(mandate);
-    let p: EventPlan = { ...plan, tasks: plan.tasks.map((t) => ({ ...t })) };
-    for (const step of planSteps(plan, mandate, { awaitVendors: mailLive })) {
-      setFeed((f) => [...f, step.label]);
-      ({ a: state, plan: p } = step.apply(state, p));
-      onChange({ ...p, autopilot: state });
-      await new Promise((r) => setTimeout(r, 260));
-    }
+    await runAutopilot(plan, mandate, mailLive, onChange, (label) => setFeed((f) => [...f, label]));
     setRunning(false);
   };
 
@@ -295,3 +288,15 @@ function Num({ label, value, onChange, disabled }: { label: string; value: numbe
 
 const THREAD_LABEL: Record<VendorThread["status"], string> = { awaiting_reply: "Awaiting reply", negotiating: "Negotiating", agreed: "Agreed · needs OK", booked: "Booked", declined: "Declined", needs_you: "Needs you" };
 const THREAD_STYLE: Record<VendorThread["status"], string> = { awaiting_reply: "bg-surface text-muted", negotiating: "bg-warning-soft text-warning", agreed: "bg-warning-soft text-warning", booked: "bg-success-soft text-success", declined: "bg-surface text-muted", needs_you: "bg-danger-soft text-danger" };
+
+/** Runs every Autopilot step in order, publishing the plan after each one so checklists tick off live. */
+export async function runAutopilot(plan: EventPlan, mandate: SpendMandate, mailLive: boolean, onChange: (p: EventPlan) => void, onStep: (label: string) => void) {
+  let state = plan.autopilot ? { ...plan.autopilot, mandate } : emptyAutopilot(mandate);
+  let p: EventPlan = { ...plan, tasks: plan.tasks.map((t) => ({ ...t })) };
+  for (const step of planSteps(plan, mandate, { awaitVendors: mailLive })) {
+    onStep(step.label);
+    ({ a: state, plan: p } = step.apply(state, p));
+    onChange({ ...p, autopilot: state });
+    await new Promise((r) => setTimeout(r, 260));
+  }
+}

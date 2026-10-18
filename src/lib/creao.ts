@@ -1,5 +1,5 @@
 /**
- * CREAO hosted agent bridge (app-scoped API Trigger). The EventPilot Ops Swarm agent lives on CREAO;
+ * CREAO hosted agent bridge (app-scoped API Trigger). The EventPilot Ops Team agent lives on CREAO;
  * EventPilot triggers it with the plan and reads back its decisions. Server-only: never expose the key.
  * Env: CREAO_API_KEY (capi_…), CREAO_APP_ID (from the agent's page on agent.creao.ai).
  */
@@ -19,7 +19,7 @@ async function call(path: string, key: string, init: RequestInit = {}): Promise<
   return j;
 }
 
-/** Runs the CREAO swarm agent and waits (polling) up to timeoutMs for its answer. */
+/** Runs the CREAO team agent and waits (polling) up to timeoutMs for its answer. */
 export async function runCreaoAgent(inputs: Record<string, string>, timeoutMs = 600_000): Promise<{ ok: true; text: string; runId: string } | { ok: false; error: string }> {
   const c = creaoConfig();
   if (!c) return { ok: false, error: "CREAO not configured" };

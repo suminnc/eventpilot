@@ -25,7 +25,7 @@ export function SwarmTab({ plan }: { plan: EventPlan }) {
         <section>
           <h3 className="section-head">CREAO independent review</h3>
           <p className="text-sm text-foreground">{plan.creao.summary}</p>
-          <p className="mt-1 text-xs text-subtle">Hosted Ops Swarm agent on CREAO · {new Date(plan.creao.ts).toLocaleString()}</p>
+          <p className="mt-1 text-xs text-subtle">Hosted Ops Team agent on CREAO · {new Date(plan.creao.ts).toLocaleString()}</p>
         </section>
       )}
 

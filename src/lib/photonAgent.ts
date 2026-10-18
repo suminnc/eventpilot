@@ -114,7 +114,7 @@ function planSummary(p: EventPlan) {
   const b = p.brief;
   const v = p.venues[p.selectedVenue];
   const risk = p.risks.find((r) => r.level === "high") ?? p.risks[0];
-  return `${b.title} is planned: ${v ? `${v.name}, ` : ""}${b.date} at ${b.startTime}, ${b.guests.toLocaleString()} guests, ${money(b.budget)} budget. Confidence ${p.score}/100${risk ? `; top risk: ${risk.issue}` : ""}.\n${autonomous() ? "The Ops Swarm is taking it from here: emailing vendors and permit offices now. I'll text you for approvals." : "Reply RUN and I'll negotiate with vendors and book it, or ask me anything."}`;
+  return `${b.title} is planned: ${v ? `${v.name}, ` : ""}${b.date} at ${b.startTime}, ${b.guests.toLocaleString()} guests, ${money(b.budget)} budget. Confidence ${p.score}/100${risk ? `; top risk: ${risk.issue}` : ""}.\n${autonomous() ? "The Ops Team is taking it from here: emailing vendors and permit offices now. I'll text you for approvals." : "Reply RUN and I'll negotiate with vendors and book it, or ask me anything."}`;
 }
 
 function negotiationText(p: EventPlan, category?: string) {
@@ -186,11 +186,11 @@ export async function handleInbound(text: string, id: string) {
 
   if (/^(this week|week|workflow|todo|to do|whats due|timeline)$/.test(low)) return reply(thisWeekText(p));
   if (/^(vendors|vendor emails|vendor status|inbox|emails|threads|replies)$/.test(low)) return reply(threadsText(p));
-  if (/^(swarm|agents|team|org|raci|who decides)$/.test(low)) return reply(swarmText(p));
+  if (/^(team|swarm|agents|org|raci|who decides)$/.test(low)) return reply(swarmText(p));
   if (/^(creao|creao review|audit|review)$/.test(low)) {
     if (!creaoConfig()) return reply("CREAO isn't connected on this server.");
     void creaoReview(p.id);
-    return reply("Asked the CREAO Ops Swarm agent for an independent review. It takes about 3 minutes; I'll text you the verdict.");
+    return reply("Asked the CREAO Ops Team agent for an independent review. It takes about 3 minutes; I'll text you the verdict.");
   }
   if (/^(stakeholders?|perspectives?|(attendee|sponsor|vendor|organizer|guest)s?( view| side| experience)?)$/.test(low)) return reply(stakeholderText(p));
   if (/^(open( the)? app|app|link|url|website|where( is| do i see)? (it|the app))$/.test(low)) {
@@ -370,7 +370,7 @@ export async function sendOutbox(planId: string, id: string): Promise<{ ok: bool
   return r.ok ? { ok: true, plan: agent().state.plan!, rev: agent().state.rev } : { ok: false, error: r.error };
 }
 
-// ---- Autonomous mode: the Ops Swarm runs a new plan end to end; only money approvals go to the organizer ----
+// ---- Autonomous mode: the Ops Team runs a new plan end to end; only money approvals go to the organizer ----
 
 const autonomous = () => process.env.AUTONOMOUS !== "0" && !!mailConfig();
 const isAutoDraft = (m: OutboxMessage) => m.status === "draft" && m.channel === "email" && (/^(bookings|events)@/.test(m.to) || /Permit application/.test(m.subject));
@@ -379,7 +379,7 @@ async function autoRun(planId: string) {
   const a = agent();
   const p = a.state.plan;
   if (!p || p.id !== planId || p.autopilot || a.working) return;
-  a.working = "Ops Swarm running";
+  a.working = "Ops Team running";
   try {
     const ran = runAutopilot(p);
     setPlan({ ...ran, autopilot: { ...ran.autopilot!, audit: appendAudit(ran.autopilot!.audit, "exec", "autonomous_run", `${SWARM_NAME} v${SWARM_VERSION} took over ${p.brief.title}`) } });
@@ -403,7 +403,7 @@ async function autoRun(planId: string) {
   void creaoReview(planId);
 }
 
-/** Independent review by the hosted CREAO Ops Swarm agent (runs in the background, ~3 min). */
+/** Independent review by the hosted CREAO Ops Team agent (runs in the background, ~3 min). */
 async function creaoReview(planId: string) {
   const p = agent().state.plan;
   if (!p || p.id !== planId || !creaoConfig()) return;
@@ -424,5 +424,5 @@ async function creaoReview(planId: string) {
   }
   const next: EventPlan = { ...cur, creao: { runId: r.runId, ts: Date.now(), summary, text: r.text.slice(0, 8000) } };
   setPlan(next.autopilot ? { ...next, autopilot: { ...next.autopilot, audit: appendAudit(next.autopilot.audit, "exec", "creao_review", summary.slice(0, 200)) } } : next);
-  await say(`CREAO Ops Swarm review of ${cur.brief.title}: ${summary}`, `creao-${r.runId.slice(0, 8)}`);
+  await say(`CREAO Ops Team review of ${cur.brief.title}: ${summary}`, `creao-${r.runId.slice(0, 8)}`);
 }

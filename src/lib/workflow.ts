@@ -1,4 +1,4 @@
-import type { EventPlan } from "./types";
+import type { EventPlan, OutboxMessage } from "./types";
 
 /**
  * Organizing workflow modeled on the Cal Hacks operations playbook (teams, T-minus gates, standard trackers),
@@ -6,8 +6,8 @@ import type { EventPlan } from "./types";
  */
 
 export type Team = { name: string; size: string; owns: string; output: string };
-export type GateStatus = "done" | "overdue" | "this_week" | "upcoming" | "past";
-export type Gate = { id: string; tMinus: number; due: string; originalDue: string; title: string; owner: string; detail: string; status: GateStatus };
+export type GateStatus = "done" | "active" | "overdue" | "this_week" | "upcoming" | "past";
+export type Gate = { id: string; tMinus: number; due: string; originalDue: string; title: string; owner: string; detail: string; status: GateStatus; auto?: boolean };
 export type Scale = "large" | "medium" | "small" | "intimate";
 export type Check = { handoff: string; checker: string; check: string };
 export type Workflow = { scale: Scale; teams: Team[]; gates: Gate[]; cadence: string[]; trackers: string[]; checks: Check[]; guardrails: string[]; daysOut: number; compressed: number };
@@ -81,6 +81,49 @@ const GATES: Tpl[] = [
   { id: "close", t: -30, title: "All payments closed; handbook updated", small: "Settle payments and reimbursements", owner: "Finance", detail: "Vendor and prize payments done; lessons into the handbook" },
 ];
 
+const BOOKED = ["auto_approved", "approved"];
+
+/** Gate progress derived from what Autopilot has actually done (emails, deals, deposits, filings). */
+export function autoProgress(plan: EventPlan): { done: Set<string>; active: Set<string> } {
+  const done = new Set<string>(), active = new Set<string>();
+  const a = plan.autopilot;
+  if (!a) return { done, active };
+  const mark = (id: string, isDone: boolean, isActive: boolean) => (isDone ? done.add(id) : isActive && active.add(id));
+  const threads = a.threads ?? [];
+  const cats = (a.shortlists ?? []).map((s) => s.category);
+  const booked = (re: RegExp) => a.purchases.some((p) => re.test(p.category) && BOOKED.includes(p.status)) || threads.some((t) => re.test(t.category) && t.status === "booked");
+  const touched = (re: RegExp) => booked(re) || a.purchases.some((p) => re.test(p.category) && p.status === "pending") || threads.some((t) => re.test(t.category) && t.status !== "declined");
+  const exact = (c: string) => new RegExp(`^${c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
+  const msgs = (f: (m: OutboxMessage) => boolean) => a.outbox.filter(f);
+  const sentAll = (list: OutboxMessage[]) => list.length > 0 && list.every((m) => m.status === "sent");
+  const hold = msgs((m) => m.subject.startsWith("Hold request"));
+  const sponsor = msgs((m) => m.to.endsWith("-prospects (list)"));
+  const invite = msgs((m) => m.to === "guest-list" && m.subject === plan.invite.subject);
+  const guide = msgs((m) => m.to === "guest-list" && m.subject.startsWith("Attendee guide"));
+  const bookingSent = (c: string) => a.outbox.some((m) => m.subject.startsWith(`Booking: ${c} for`) && m.status === "sent");
+  const permitIds = (plan.permits ?? []).map((p) => p.taskId).filter(Boolean) as string[];
+  const permitDone = permitIds.filter((id) => plan.tasks.find((t) => t.id === id)?.done).length;
+
+  mark("budget-v1", true, true);
+  mark("venue-shortlist", hold.length > 0 || booked(/^venue$/i), false);
+  mark("venue-sign", booked(/^venue$/i), hold.some((m) => m.status === "sent") || touched(/^venue$/i));
+  mark("walkthrough-1", false, hold.some((m) => m.status === "sent"));
+  mark("sponsor-launch", sentAll(sponsor), sponsor.length > 0);
+  mark("services-rfq", cats.length > 0 && cats.every((c) => booked(exact(c)) || bookingSent(c)), cats.length > 0);
+  mark("services-choose", cats.length > 0 && cats.every((c) => booked(exact(c))), cats.some((c) => touched(exact(c))) || cats.length > 0);
+  mark("merch-scope", cats.some((c) => /swag|merch|prize/i.test(c)), false);
+  mark("meals-final", booked(/cater|food/i), touched(/cater|food/i) || cats.some((c) => /cater|food/i.test(c)));
+  mark("apps-open", sentAll(invite), invite.length > 0);
+  mark("rsvp-open", sentAll(invite), invite.length > 0);
+  const all = ["Venue", ...cats];
+  const ordered = all.every((c) => booked(exact(c)));
+  mark("orders", ordered, a.purchases.some((p) => BOOKED.includes(p.status)));
+  mark("permits", permitIds.length > 0 && permitDone === permitIds.length, permitDone > 0 || a.outbox.some((m) => permitIds.includes(m.taskId ?? "")));
+  mark("confirm", ordered && !a.purchases.some((p) => p.status === "pending") && !threads.some((t) => ["awaiting_reply", "negotiating", "agreed", "needs_you"].includes(t.status)), threads.length > 0);
+  mark("guide", sentAll(guide), guide.length > 0);
+  return { done, active };
+}
+
 const FACTOR: Record<Scale, number> = { large: 1, medium: 0.4, small: 0.15, intimate: 0.05 };
 const MIN_SPLIT: Record<Scale, number> = { large: 0, medium: 0, small: 0, intimate: 0 };
 
@@ -94,7 +137,8 @@ export function buildWorkflow(plan: EventPlan, today = iso(new Date())): Workflo
   const names = new Set(teams.map((t) => t.name));
   const ownerOf = (o: string) => (names.has(o) ? o : o === "Comms" && names.has("Comms & design") ? "Comms & design" : o === "Marketing" && names.has("Comms & design") ? "Comms & design" : o === "Design" && names.has("Comms & design") ? "Comms & design" : names.has("Logistics") && !["Exec", "Finance"].includes(o) ? "Logistics" : teams[0].name);
   const daysOut = Math.round((new Date(`${b.date}T12:00:00`).getTime() - new Date(`${today}T12:00:00`).getTime()) / DAY);
-  const done = new Set(plan.workflowDone ?? []);
+  const auto = autoProgress(plan);
+  const done = new Set([...(plan.workflowDone ?? []), ...auto.done]);
   const little = scale === "small" || scale === "intimate";
   const tpls = GATES.filter((g) => (!g.when || g.when(ctx)) && !(little && g.skipSmall));
   let catchUp = 0;
@@ -106,8 +150,8 @@ export function buildWorkflow(plan: EventPlan, today = iso(new Date())): Workflo
       // Compress missed gates into a catch-up sequence between today and the day before the event.
       due = addDays(today, Math.min(Math.max(0, daysOut - 1), Math.floor(catchUp++ / 2)));
     }
-    const status: GateStatus = done.has(g.id) ? "done" : due < today ? "past" : originalDue < today ? "overdue" : due <= addDays(today, 7) ? "this_week" : "upcoming";
-    return { id: g.id, tMinus, due, originalDue, title: little && g.small ? g.small : g.title, owner: ownerOf(g.owner), detail: g.detail, status };
+    const status: GateStatus = done.has(g.id) ? "done" : auto.active.has(g.id) ? "active" : due < today ? "past" : originalDue < today ? "overdue" : due <= addDays(today, 7) ? "this_week" : "upcoming";
+    return { id: g.id, tMinus, due, originalDue, title: little && g.small ? g.small : g.title, owner: ownerOf(g.owner), detail: g.detail, status, auto: auto.done.has(g.id) || auto.active.has(g.id) };
   });
   const cadence =
     scale === "large"
@@ -161,7 +205,7 @@ export function buildWorkflow(plan: EventPlan, today = iso(new Date())): Workflo
 /** Short text summary for Photon ("THIS WEEK"). */
 export function thisWeekText(plan: EventPlan): string {
   const w = buildWorkflow(plan);
-  const open = w.gates.filter((g) => g.status === "overdue" || g.status === "this_week" || g.status === "past");
+  const open = w.gates.filter((g) => g.status === "overdue" || g.status === "this_week" || g.status === "past" || g.status === "active");
   if (!open.length) return `${plan.brief.title}: nothing due this week. Next: ${w.gates.find((g) => g.status === "upcoming")?.title ?? "event day"}.`;
-  return [`${plan.brief.title} · ${w.daysOut} days out${w.compressed ? ` · ${w.compressed} late gates compressed` : ""}`, ...open.slice(0, 6).map((g) => `${g.due.slice(5)} ${g.title} (${g.owner})${g.status === "overdue" ? " · late" : ""}`), open.length > 6 ? `+${open.length - 6} more in the Workflow tab.` : ""].filter(Boolean).join("\n");
+  return [`${plan.brief.title} · ${w.daysOut} days out${w.compressed ? ` · ${w.compressed} late gates compressed` : ""}`, ...open.slice(0, 6).map((g) => `${g.due.slice(5)} ${g.title} (${g.owner})${g.status === "active" ? " · Autopilot on it" : g.status === "overdue" ? " · late" : ""}`), open.length > 6 ? `+${open.length - 6} more in the Plan of action tab.` : ""].filter(Boolean).join("\n");
 }

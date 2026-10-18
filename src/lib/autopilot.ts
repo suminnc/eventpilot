@@ -100,7 +100,7 @@ export function planSteps(plan: EventPlan, mandate: SpendMandate, opts: { awaitV
           channel: "email",
           to: `events@${slug(venue.name)}.com`,
           subject: `Hold request: ${b.title} on ${b.date}`,
-          body: `Hello ${venue.name} events team,\n\nWe'd like to place a hold for ${b.title} on ${b.date} from ${b.startTime} for ${b.durationHours} hours, ${b.guests.toLocaleString()} guests.\nRequirements: ${b.constraints.join(", ") || "standard AV, Wi-Fi"}.\n\nCould you share availability, a quote, and your deposit terms?\n\nThanks!`,
+          body: `Hello ${venue.name} events team,\n\nWe'd like to place a hold for ${b.title} on ${b.date} from ${b.startTime} for ${b.durationHours} hours, ${b.guests.toLocaleString()} guests.\nRequirements: ${b.constraints.join(", ") || "standard AV, Wi-Fi"}.\n\nCould you share availability, a quote, and your deposit terms? We'd also like to book two walkthroughs: one about 8 weeks out for the floorplan, and a final one about 2 weeks before the event.\n\nThanks!`,
           taskId: findTask(/hold on|venue/i),
         },
         "scout",
@@ -191,6 +191,7 @@ export function planSteps(plan: EventPlan, mandate: SpendMandate, opts: { awaitV
 
   steps.push(
     msg({ channel: "email", to: "guest-list", subject: plan.invite.subject, body: plan.invite.body, taskId: findTask(/save-the-date|registration/i) }, "comms"),
+    msg({ channel: "email", to: "guest-list", subject: `Attendee guide: ${b.title}`, body: `Hi {first_name},\n\nHere's everything you need for ${b.title} on ${b.date} at ${venue?.name ?? b.city}.\n\nSchedule:\n${plan.schedule.slice(0, 12).map((s) => `${plan.schedule.some((x) => (x.day ?? 1) > 1) ? `Day ${s.day ?? 1} ` : ""}${s.time}  ${s.title}`).join("\n")}\n\nDoors open at ${b.startTime}.${b.guests >= 150 ? " Bring a photo ID for check-in." : ""}${plan.ops?.policies.length ? `\nPlease read our policies: ${plan.ops.policies.map((x) => x.name).join(", ")}.` : ""}\n\nSee you there!`, taskId: findTask(/guide|logistics email|day-of info/i) }, "comms"),
     msg({ channel: "sms", to: "guest-list (T-3 days)", subject: "Reminder", body: plan.invite.sms, taskId: findTask(/reminder/i) }, "comms"),
   );
   return steps;

@@ -2,14 +2,14 @@ import type { AgentId, EventPlan } from "./types";
 import { buildWorkflow } from "./workflow";
 
 /**
- * EventPilot Autonomous Ops Swarm v2.0.0.
+ * EventPilot Autonomous Ops Team v2.0.0.
  * Exec owns scope and sign-off, the Logistics lead decides what the event needs and fans out to one sub-agent per
  * applicable category, Finance holds an affordability veto, and an independent Verifier checks the result before Exec
  * approves. Decisions are deterministic rules so the agents actually check each other instead of agreeing.
  */
 
 export const SWARM_VERSION = "2.0.0";
-export const SWARM_NAME = "EventPilot Autonomous Ops Swarm";
+export const SWARM_NAME = "EventPilot Autonomous Ops Team";
 
 export type CategoryKey = "food" | "venue" | "program" | "merch" | "people" | "sponsorship" | "comms";
 export type SwarmCategory = { key: CategoryKey; name: string; agent: AgentId; owns: string; applies: boolean; why: string; line: number; estimate: number; vendors: string[] };

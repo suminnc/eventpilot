@@ -6,16 +6,14 @@ import {
   CalendarDays, Copy, Download, FileText, MapPin, MessageSquare, ShieldAlert, Users, Wallet, CloudSun, Clock, Star, Check,
 } from "lucide-react";
 import type { EventPlan } from "@/lib/types";
-import { AGENTS } from "@/lib/types";
 import { planToICS, planToMarkdown } from "@/lib/export";
 import { AutopilotPanel } from "./AutopilotPanel";
 import { reselectVenue } from "@/lib/replan";
-import { WorkflowTab } from "./WorkflowTab";
-import { StakeholdersTab } from "./StakeholdersTab";
+import { ActionPlanTab } from "./ActionPlanTab";
 import { SwarmTab } from "./SwarmTab";
 
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
-const TABS = ["Overview", "Swarm", "Workflow", "Stakeholders", "Schedule", "Budget", "Venues", "Tasks", "Permits", "Ops", "Invite", "Autopilot"] as const;
+const TABS = ["Overview", "Team", "Plan of action", "Schedule", "Budget", "Venues", "Permits", "Invite", "Autopilot"] as const;
 type Tab = (typeof TABS)[number];
 // Budget categories: sage, sky and earth tones that sit with the brand accent.
 const COLORS = ["#4f6146", "#7e9a6e", "#a9bc97", "#4d6b7d", "#86a3b4", "#bccdd8", "#8c7a5b", "#b8a07a", "#5f6570", "#a3a8b0"];
@@ -73,7 +71,7 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
             className={`-mb-px flex shrink-0 items-center border-b-2 pb-3 text-sm transition ${tab === t ? "border-foreground font-semibold text-foreground" : "border-transparent font-medium text-muted hover:text-foreground"}`}
           >
             {t}
-            {t === "Tasks" && <span className="ml-1.5 font-mono text-xs text-subtle">{done}/{plan.tasks.length}</span>}
+            {t === "Plan of action" && <span className="ml-1.5 font-mono text-xs text-subtle">{done}/{plan.tasks.length}</span>}
             {t === "Permits" && (plan.permits?.length ?? 0) > 0 && <span className="ml-1.5 font-mono text-xs text-subtle">{plan.permits!.filter((p) => plan.tasks.find((x) => x.id === p.taskId)?.done).length}/{plan.permits!.length}</span>}
             {t === "Autopilot" && (
               <span className={`ml-1.5 rounded-lg px-1.5 py-px text-[11px] font-semibold ${pending ? "bg-warning-soft text-warning" : "bg-accent-soft text-accent"}`}>
@@ -182,28 +180,6 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
           </div>
         )}
 
-        {tab === "Tasks" && (
-          <div>
-            <div className="mb-2 h-1 overflow-hidden bg-line">
-              <div className="h-full bg-accent transition-all" style={{ width: `${(done / Math.max(1, plan.tasks.length)) * 100}%` }} />
-            </div>
-            {plan.tasks.map((t) => (
-              <label key={t.id} className="flex cursor-pointer items-center gap-3 border-b border-line px-1 py-3 text-sm hover:bg-surface/60">
-                <input
-                  type="checkbox"
-                  checked={t.done}
-                  onChange={() => onChange({ ...plan, tasks: plan.tasks.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)) })}
-                  className="h-4 w-4 accent-[#4f6146]"
-                />
-                <span className={`min-w-0 flex-1 ${t.done ? "text-subtle line-through" : "text-foreground"}`}>{t.title}</span>
-                <span className="hidden text-xs text-muted sm:inline">{AGENTS[t.agent]?.name}</span>
-                <span className="hidden text-xs text-subtle sm:inline">{t.owner}</span>
-                <span className={`shrink-0 rounded-lg px-1.5 py-0.5 font-mono text-[11px] ${t.priority === "high" ? "bg-danger-soft text-danger" : "bg-surface text-muted"}`}>{t.due}</span>
-              </label>
-            ))}
-          </div>
-        )}
-
         {tab === "Permits" && (
           <div>
             <p className="mb-4 flex items-start gap-2 rounded-xl bg-surface p-3 text-xs leading-[18px] text-muted">
@@ -234,11 +210,12 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
           </div>
         )}
 
-        {tab === "Swarm" && <SwarmTab plan={plan} />}
-        {tab === "Workflow" && <WorkflowTab plan={plan} onChange={onChange} />}
-        {tab === "Stakeholders" && <StakeholdersTab plan={plan} onChange={onChange} />}
-
-        {tab === "Ops" && <OpsTab plan={plan} />}
+        {tab === "Team" && <SwarmTab plan={plan} />}
+        {tab === "Plan of action" && (
+          <ActionPlanTab plan={plan} onChange={onChange}>
+            <OpsTab plan={plan} />
+          </ActionPlanTab>
+        )}
 
         {tab === "Autopilot" && <AutopilotPanel plan={plan} onChange={onChange} />}
 
@@ -341,42 +318,10 @@ const addDays = (d: string, n: number) => { const x = new Date(`${d}T12:00`); x.
 function OpsTab({ plan }: { plan: EventPlan }) {
   const ops = plan.ops;
   if (!ops) return <p className="text-sm text-muted">Re-run the plan to size staffing, food and infrastructure.</p>;
-  const today = new Date().toISOString().slice(0, 10);
-  const doneIds = new Set(plan.tasks.filter((t) => t.done).map((t) => t.id));
-  const live = (plan.autopilot?.purchases ?? []).filter((p) => ["auto_approved", "approved"].includes(p.status));
-  const needDeposit = ["Venue", ...plan.vendors.map((v) => v.category)];
-  const permits = plan.permits ?? [];
-  const blockers = [
-    ...permits.filter((p) => !doneIds.has(p.taskId ?? "")).map((p) => `${p.atRisk ? "Expedite" : "File"}: ${p.name}`),
-    ...needDeposit.filter((c) => !live.some((p) => p.category === c)).map((c) => `No ${c} deposit yet`),
-    ...plan.tasks.filter((t) => !t.done && t.due < today).map((t) => `Overdue: ${t.title}`),
-  ];
-  const pct = (n: number, d: number) => (d ? n / d : 1);
-  const readiness = Math.round(100 * (0.5 * pct(doneIds.size, plan.tasks.length) + 0.25 * pct(permits.filter((p) => doneIds.has(p.taskId ?? "")).length, permits.length) + 0.25 * pct(needDeposit.filter((c) => live.some((p) => p.category === c)).length, needDeposit.length)));
   const card = "rounded-2xl border border-line p-5";
   const h = "section-head mb-3";
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
-      <div className={`${card} grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center`}>
-        <div>
-          <div className={h}>Readiness</div>
-          <div className="font-display text-5xl text-foreground">{readiness}<span className="text-xl text-subtle">%</span></div>
-        </div>
-        <div className="min-w-0 text-sm">
-          {blockers.length === 0 ? (
-            <p className="text-success">Nothing blocking. Run the day-of brief.</p>
-          ) : (
-            <>
-              <p className="mb-1 text-muted">{blockers.length} thing{blockers.length > 1 ? "s" : ""} still blocking the event:</p>
-              <ul className="grid grid-cols-[minmax(0,1fr)] gap-0.5 text-foreground">
-                {blockers.slice(0, 6).map((x) => <li key={x}>· {x}</li>)}
-                {blockers.length > 6 && <li className="text-subtle">+{blockers.length - 6} more on Tasks and Permits</li>}
-              </ul>
-            </>
-          )}
-        </div>
-      </div>
-
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[repeat(2,minmax(0,1fr))]">
         <section className={card}>
           <h3 className={h}>Staffing & safety</h3>

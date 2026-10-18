@@ -36,7 +36,7 @@ export function stakeholderViews(plan: EventPlan): View[] {
     const issues: Issue[] = [];
     if (w.daysOut < 0) issues.push({ level: "high", issue: `The date (${b.date}) has already passed`, fix: "Pick a new date, e.g. Refine: \"move it to next Friday\"" });
     if (pending.length) issues.push({ level: "medium", issue: `${pending.length} payment decision${pending.length > 1 ? "s" : ""} waiting on you`, fix: "Approve or reject in Autopilot, or text YES n / NO n" });
-    if (late.length) issues.push({ level: late.length > 5 ? "high" : "medium", issue: `${late.length} milestone${late.length > 1 ? "s" : ""} past the normal date`, fix: "Work the catch-up plan in the Workflow tab; text THIS WEEK for the short list" });
+    if (late.length) issues.push({ level: late.length > 5 ? "high" : "medium", issue: `${late.length} milestone${late.length > 1 ? "s" : ""} past the normal date`, fix: "Work the catch-up plan in the Plan of action tab; text THIS WEEK for the short list" });
     if (atRisk.length && !highRisks.some((r) => /permit/i.test(r.issue))) issues.push({ level: "high", issue: `${atRisk.length} permit${atRisk.length > 1 ? "s" : ""} can't clear in normal lead time`, fix: "Call each agency today and ask for expedited review" });
     if (spend > b.budget * 1.001) issues.push({ level: "high", issue: `Budget lines total ${money(spend)}, over the ${money(b.budget)} budget`, fix: "Refine: \"make it 10% cheaper\"" });
     highRisks.slice(0, 3).forEach((r) => issues.push({ level: "high", issue: r.issue.length > 110 ? `${r.issue.slice(0, r.issue.lastIndexOf(";", 110) > 40 ? r.issue.lastIndexOf(";", 110) : 107)}…` : r.issue, fix: r.mitigation }));

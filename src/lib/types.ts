@@ -269,6 +269,6 @@ export const AGENTS: Record<AgentId, { name: string; role: string; color: string
   verifier: { name: "Verifier", role: "Independent check before approval", color: "#f87171" },
 };
 
-/** Ops Swarm v2.0.0 roster, in DAG order. Optional agents only show when the Logistics lead assigns them. */
+/** Ops Team v2.0.0 roster, in DAG order. Optional agents only show when the Logistics lead assigns them. */
 export const SWARM_ROSTER: AgentId[] = ["exec", "lead", "venue", "food", "program", "merch", "people", "sponsorship", "comms", "finance", "verifier"];
 export const OPTIONAL_AGENTS: AgentId[] = ["food", "merch", "people", "sponsorship"];

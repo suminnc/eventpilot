@@ -213,7 +213,14 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
                     {m.status === "sent" ? (
                       <span className="flex items-center gap-1 text-xs font-medium text-success"><Check size={12} /> Sent</span>
                     ) : (
-                      <button disabled={running} className="shrink-0 rounded-lg border border-line px-2 py-0.5 text-xs font-medium text-foreground hover:bg-surface disabled:opacity-40" onClick={(e) => { e.preventDefault(); onChange(sendMessage(plan, m.id)); }}>Approve & send</button>
+                      <button disabled={running} className="shrink-0 rounded-lg border border-line px-2 py-0.5 text-xs font-medium text-foreground hover:bg-surface disabled:opacity-40" onClick={async (e) => {
+                        e.preventDefault();
+                        if (m.channel === "email") {
+                          const r = await fetch("/api/email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: m.to, subject: m.subject, body: m.body, title: plan.brief.title }) }).then((x) => x.json()).catch(() => ({ ok: false, error: "network error" }));
+                          if (!r.simulated && !r.ok) { window.alert(`Email not sent: ${r.error}`); return; }
+                        }
+                        onChange(sendMessage(plan, m.id));
+                      }}>Approve & send</button>
                     )}
                   </summary>
                   <div className="mt-2 text-xs text-subtle">To: {m.to}</div>

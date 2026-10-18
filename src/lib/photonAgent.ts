@@ -3,6 +3,7 @@ import path from "path";
 import type { EventPlan, TextMessage } from "./types";
 import { discoverLink, isLinked, organizerReplies, photonConfig, textOrganizer } from "./photon";
 import { applyReply, decisionText, planContext, refNum, untexted } from "./decisions";
+import { mailConfig, sendEmail } from "./mailer";
 import { sendMessage, appendAudit, committed, defaultMandate, emptyAutopilot, negotiatedSavings, planSteps } from "./autopilot";
 import { runPlanner } from "./agents/orchestrator";
 import { answerQuestion } from "./answer";
@@ -179,11 +180,23 @@ export async function handleInbound(text: string, id: string) {
   if (/^(send|send all|send them|send it|send drafts|send emails|send the emails|do it for me|go ahead and send|file permits|file them)$/.test(low)) {
     const drafts = p.autopilot?.outbox.filter((m) => m.status === "draft") ?? [];
     if (!drafts.length) return reply(p.autopilot ? "Nothing to send: every email and permit draft is already out." : "No drafts yet. Text RUN and I'll prepare vendor emails and permit filings.");
-    let q = drafts.reduce((acc, m) => sendMessage(acc, m.id), p);
-    q = log(q, "organizer", "text_command", `iMessage: "${t.slice(0, 40)}"`);
+    const mail = mailConfig();
+    let q = log(p, "organizer", "text_command", `iMessage: "${t.slice(0, 40)}"`);
+    const sent: typeof drafts = [], failed: string[] = [];
+    for (const m of drafts) {
+      if (mail && m.channel === "email") {
+        const r = await sendEmail(m, p.brief.title);
+        if (!r.ok) { failed.push(`${m.to}: ${r.error}`); continue; }
+        q = log(q, "agent", "email_delivered", `${m.subject} → ${r.to} (written for ${m.to})`);
+      }
+      q = sendMessage(q, m.id);
+      sent.push(m);
+    }
     setPlan(q);
-    const shown = drafts.slice(0, 4).map((m) => `${m.subject} → ${m.to}`).join("; ");
-    return reply(`Sent ${drafts.length} draft${drafts.length > 1 ? "s" : ""} (simulated): ${shown}${drafts.length > 4 ? ` and ${drafts.length - 4} more` : ""}. Logged in the audit trail. Money still only moves on YES / PICK.`);
+    const shown = sent.slice(0, 4).map((m) => `${m.subject} → ${m.to}`).join("; ");
+    const how = mail ? `emailed for real from ${mail.from}, all redirected to ${mail.redirect}` : "simulated";
+    const head = sent.length ? `Sent ${sent.length} draft${sent.length > 1 ? "s" : ""} (${how}): ${shown}${sent.length > 4 ? ` and ${sent.length - 4} more` : ""}.` : "Nothing went out.";
+    return reply(`${head}${failed.length ? ` ${failed.length} failed and stay in drafts (${failed[0]}).` : ""} Logged in the audit trail. Money still only moves on YES / PICK.`);
   }
 
   const neg = low.match(/^(?:negotiate|negotiation|savings|deals?)(?:\s+([a-z &]+))?$/);

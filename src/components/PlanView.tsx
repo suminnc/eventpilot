@@ -9,6 +9,7 @@ import type { EventPlan } from "@/lib/types";
 import { AGENTS } from "@/lib/types";
 import { planToICS, planToMarkdown } from "@/lib/export";
 import { AutopilotPanel } from "./AutopilotPanel";
+import { useFadeNav } from "./useFadeNav";
 import { reselectVenue } from "@/lib/replan";
 import { WorkflowTab } from "./WorkflowTab";
 import { StakeholdersTab } from "./StakeholdersTab";
@@ -26,6 +27,7 @@ const RISK: Record<string, string> = {
 
 export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: EventPlan) => void }) {
   const [tab, setTab] = useState<Tab>("Overview");
+  const { go, fadeClass } = useFadeNav({ ms: 140 });
   const b = plan.brief;
   const venue = plan.venues[plan.selectedVenue];
   const done = plan.tasks.filter((t) => t.done).length;
@@ -68,7 +70,7 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
         {TABS.map((t) => (
           <button
             key={t}
-            onClick={() => setTab(t)}
+            onClick={() => t !== tab && go(() => setTab(t))}
             className={`-mb-px flex shrink-0 items-center border-b-2 pb-3 text-sm transition ${tab === t ? "border-foreground font-semibold text-foreground" : "border-transparent font-medium text-muted hover:text-foreground"}`}
           >
             {t}
@@ -83,7 +85,7 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
         ))}
       </div>
 
-      <div className="pt-7">
+      <div key={tab} className={`page-in page-fade pt-7 ${fadeClass}`}>
         {tab === "Overview" && (
           <div className="flex flex-col gap-8">
             <p className="border-l-2 border-foreground pl-4 text-[17px] leading-7 text-foreground">{plan.summary}</p>

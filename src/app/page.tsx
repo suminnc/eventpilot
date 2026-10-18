@@ -67,7 +67,7 @@ export default function Home() {
                 <span className="italic">Your AI crew runs it.</span>
               </h1>
               <p className="mx-auto mt-6 max-w-[600px] text-base leading-[26px] text-white/80">
-                A coordinator delegates to a venue scout, budget analyst, scheduler, logistics lead, comms writer and a critic — and you watch them work in real time.
+                An exec sets the scope and owns delivery, a logistics lead distributes the work to one sub-agent per task, finance gates every dollar, and a verifier checks it — and you watch them work in real time.
               </p>
 
               <div className="mt-11 w-full rounded-2xl bg-background text-left shadow-[0_24px_48px_-24px_rgba(20,22,26,0.35)]">

@@ -66,20 +66,20 @@ const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 const briefJSON = (b: EventBrief) => JSON.stringify({ ...b, prompt: undefined });
 const fb = (ctx: Ctx) => (ctx.feedback ? `\nUser refinement request (highest priority): "${ctx.feedback}"` : "");
 
-// ---------------------------------------------------------------- Coordinator
-async function coordinator(ctx: Ctx, req: PlanRequest): Promise<EventBrief> {
-  return step(ctx, "coordinator", "Reading your request and extracting the event brief…", async () => {
+// ---------------------------------------------------------------- Exec
+async function execAgent(ctx: Ctx, req: PlanRequest): Promise<EventBrief> {
+  return step(ctx, "exec", "Reading your request and extracting the event brief…", async () => {
     let base: EventBrief;
     if (req.previous && req.feedback) {
-      think(ctx, "coordinator", `Applying refinement: “${req.feedback}”`);
+      think(ctx, "exec", `Applying refinement: “${req.feedback}”`);
       base = applyFeedbackOffline(req.previous.brief, req.feedback);
     } else {
       base = parseBriefOffline(req.prompt, req.brief);
     }
-    const brief = await withLLM(ctx, "coordinator", () => base, async (llm) => {
+    const brief = await withLLM(ctx, "exec", () => base, async (llm) => {
       const out = await chatJSON<Partial<EventBrief>>(
         llm,
-        `You are the Coordinator agent of an event-planning crew. Extract a structured brief.
+        `You are the Exec agent of an event-planning crew — you own delivery and the attendee experience. Extract a structured brief.
 Fields: eventType, title (catchy, <=6 words), city, date (YYYY-MM-DD, future), startTime (HH:mm 24h), durationHours (number), guests (number), budget (USD number), vibe (short phrase), constraints (string[]).
 Today is ${new Date().toISOString().slice(0, 10)}. Keep any field the user did not mention equal to the draft.`,
         `User request: ${req.prompt}${req.feedback ? `\nRefinement: ${req.feedback}` : ""}\nDraft brief: ${briefJSON(base)}`,
@@ -87,7 +87,7 @@ Today is ${new Date().toISOString().slice(0, 10)}. Keep any field the user did n
       );
       return sanitizeBrief({ ...base, ...out, prompt: base.prompt });
     });
-    think(ctx, "coordinator", `Delegating to Venue Scout + Logistics in parallel, then Budget & Scheduler, then Comms, then Critic review.`);
+    think(ctx, "exec", `Scope locked. The Logistics lead scopes what this event needs and distributes to the category sub-agents; Finance gates the spend; Comms owns the attendee voice; then the Verifier adversarially checks it before I approve.`);
     return brief;
   }, (b) => `${b.title}: ${b.guests} guests · ${money(b.budget)} · ${b.date} ${b.startTime} · ${b.city}`);
 }
@@ -104,23 +104,23 @@ function sanitizeBrief(b: EventBrief): EventBrief {
   };
 }
 
-// ---------------------------------------------------------------- Venue Scout
+// ---------------------------------------------------------------- Venue & Services sub-agent
 async function scout(ctx: Ctx, brief: EventBrief): Promise<Venue[]> {
-  return step(ctx, "scout", `Searching venues in ${brief.city} for ${brief.guests} guests…`, async () => {
+  return step(ctx, "venue", `Searching venues in ${brief.city} for ${brief.guests} guests…`, async () => {
     const maxHourly = (brief.budget * 0.35) / billableHours(brief.durationHours);
-    think(ctx, "scout", `Venue should stay under ~35% of budget → ≤ ${money(maxHourly)}/hr.`);
+    think(ctx, "venue", `Venue should stay under ~35% of budget → ≤ ${money(maxHourly)}/hr.`);
     const found = await tool(
-      ctx, "scout", "venue_search",
+      ctx, "venue", "venue_search",
       JSON.stringify({ city: brief.city, type: brief.eventType, vibe: brief.vibe, guests: brief.guests, maxHourly: Math.round(maxHourly) }),
       () => venueSearchTool(brief.city, brief.eventType, brief.vibe, brief.guests, maxHourly, brief.prompt),
       (r) => r.map((v) => `${v.name} (${v.capacity} cap, ${money(v.pricePerHour)}/hr)`).join("; "),
     );
-    return withLLM(ctx, "scout",
+    return withLLM(ctx, "venue",
       () => found.map((v) => ({ ...v, why: offlineWhy(v, brief, maxHourly) })),
       async (llm) => {
         const out = await chatJSON<{ venues: { name: string; why: string }[] }>(
           llm,
-          `You are the Venue Scout agent. Rank the candidate venues best-first for the brief and write a punchy 1-2 sentence "why" for each referencing capacity, cost, and vibe. If the brief names a specific venue, rank it first. Return {"venues":[{"name","why"}]} using only the given names.`,
+          `You are the Venue & Services sub-agent. Rank the candidate venues best-first for the brief and write a punchy 1-2 sentence "why" for each referencing capacity, cost, and vibe. If the brief names a specific venue, rank it first. Return {"venues":[{"name","why"}]} using only the given names.`,
           `Brief: ${briefJSON(brief)}${fb(ctx)}\nCandidates: ${JSON.stringify(found)}`,
         );
         const ranked = out.venues
@@ -128,7 +128,7 @@ async function scout(ctx: Ctx, brief: EventBrief): Promise<Venue[]> {
           .filter(Boolean) as Venue[];
         const list = ranked.length ? ranked : found.map((v) => ({ ...v, why: offlineWhy(v, brief, maxHourly) }));
         const asked = list.findIndex((v) => namePattern(v.name).test(brief.prompt.toLowerCase()));
-        if (asked > 0) think(ctx, "scout", `The brief names ${list[asked].name}, so it stays the top pick.`);
+        if (asked > 0) think(ctx, "venue", `The brief names ${list[asked].name}, so it stays the top pick.`);
         return asked > 0 ? [list[asked], ...list.filter((_, i) => i !== asked)] : list;
       });
   }, (v) => `Top pick: ${v[0]?.name ?? "none"} (+${Math.max(0, v.length - 1)} alternates)`);
@@ -140,20 +140,22 @@ function offlineWhy(v: Venue, b: EventBrief, maxHourly: number) {
   return `${v.style} in ${v.neighborhood} that ${fit} and ${cost}.`;
 }
 
-// ---------------------------------------------------------------- Budget Analyst
+// ---------------------------------------------------------------- Finance
 
 async function budgetAgent(ctx: Ctx, brief: EventBrief, venue: Venue | undefined): Promise<BudgetLine[]> {
-  return step(ctx, "budget", `Allocating ${money(brief.budget)} across categories…`, async () => {
+  return step(ctx, "finance", `Allocating ${money(brief.budget)} across categories…`, async () => {
     const hrs = billableHours(brief.durationHours);
     const venueCost = venue ? venue.pricePerHour * hrs : brief.budget * 0.25;
-    const lines = await tool(ctx, "budget", "budget_calculator", JSON.stringify({ total: brief.budget, venueCost, guests: brief.guests }), () => allocateBudget(brief, venue),    (r) => r.map((l) => `${l.category} ${money(l.amount)}`).join(", "));
-    if (venueCost > brief.budget * 0.5) think(ctx, "budget", `Venue eats ${Math.round((venueCost / brief.budget) * 100)}% of budget — flagging for Critic.`);
-    think(ctx, "budget", "Budget math stays deterministic so totals always reconcile to the dollar.");
+    const lines = await tool(ctx, "finance", "budget_calculator", JSON.stringify({ total: brief.budget, venueCost, guests: brief.guests }), () => allocateBudget(brief, venue),    (r) => r.map((l) => `${l.category} ${money(l.amount)}`).join(", "));
+    if (venueCost > brief.budget * 0.5) think(ctx, "finance", `Venue eats ${Math.round((venueCost / brief.budget) * 100)}% of budget — flagging for the Verifier.`);
+    const overCap = lines.filter((l) => l.amount > brief.budget * 0.5);
+    if (overCap.length) think(ctx, "finance", `Cost gate: ${overCap.map((l) => l.category).join(", ")} exceed 50% of budget — needs Exec sign-off before anything is committed.`);
+    think(ctx, "finance", "Budget math stays deterministic so totals always reconcile to the dollar.");
     return lines;
   }, (l) => `${l.length} line items · per-guest ≈ ${money(brief.budget / brief.guests)}`);
 }
 
-// ---------------------------------------------------------------- Scheduler
+// ---------------------------------------------------------------- Program & Run-of-show sub-agent
 function addMin(hhmm: string, m: number) {
   const [h, mm] = hhmm.split(":").map(Number);
   const t = (h * 60 + mm + m + 24 * 60 * 10) % (24 * 60);
@@ -197,7 +199,7 @@ const TEMPLATES: Record<string, { length: number; items: [number, number, string
 };
 
 async function scheduler(ctx: Ctx, brief: EventBrief, venue: Venue | undefined): Promise<ScheduleItem[]> {
-  return step(ctx, "scheduler", `Drafting a ${brief.durationHours}h run-of-show…`, async () => {
+  return step(ctx, "program", `Drafting a ${brief.durationHours}h run-of-show…`, async () => {
     const tpl = TEMPLATES[brief.eventType] || TEMPLATES.default;
     const scale = brief.durationHours / tpl.length;
     const [sh, sm] = brief.startTime.split(":").map(Number);
@@ -222,10 +224,10 @@ async function scheduler(ctx: Ctx, brief: EventBrief, venue: Venue | undefined):
       const gap = startOf(draft[i + 1]) - startOf(draft[i]);
       if (gap > 0 && draft[i].durationMin > gap) draft[i].durationMin = gap;
     }
-    return withLLM(ctx, "scheduler", () => draft, async (llm) => {
+    return withLLM(ctx, "program", () => draft, async (llm) => {
       const out = await chatJSON<{ schedule: ScheduleItem[] }>(
         llm,
-        `You are the Scheduler agent. Produce a realistic, specific run-of-show for the event starting at startTime and lasting durationHours. 6-14 items. Each: day (1-based, for multi-day events), time (HH:mm 24h), durationMin, title, detail (specific, actionable), owner (role). Return {"schedule":[...]}.`,
+        `You are the Program & Run-of-show sub-agent. Produce a realistic, specific run-of-show for the event starting at startTime and lasting durationHours. 6-14 items. Each: day (1-based, for multi-day events), time (HH:mm 24h), durationMin, title, detail (specific, actionable), owner (role). Return {"schedule":[...]}.`,
         `Brief: ${briefJSON(brief)}\nVenue: ${venue?.name ?? "TBD"}${fb(ctx)}\nDraft: ${JSON.stringify(draft)}`,
       );
       const s = out.schedule?.filter((i) => /^\d{1,2}:\d{2}$/.test(i.time) && i.title);
@@ -234,9 +236,9 @@ async function scheduler(ctx: Ctx, brief: EventBrief, venue: Venue | undefined):
   }, (s) => `${s.length} blocks from ${s[0]?.time} to ${s.length ? addMin(s[s.length - 1].time, s[s.length - 1].durationMin) : "?"}`);
 }
 
-// ---------------------------------------------------------------- Logistics
+// ---------------------------------------------------------------- Logistics lead (hub)
 async function logistics(ctx: Ctx, brief: EventBrief, budget: BudgetLine[], venue: Venue | undefined, weather: Weather): Promise<{ vendors: Vendor[]; tasks: Task[] }> {
-  return step(ctx, "logistics", "Lining up vendors and building the task timeline…", async () => {
+  return step(ctx, "logistics_lead", "Lining up vendors and building the task timeline…", async () => {
     const food = budget.find((b) => /food|catering/i.test(b.category))?.amount ?? brief.budget * 0.35;
     const vendors: Vendor[] = [
       { category: "Catering", suggestion: brief.guests > 150 ? "Full-service caterer with buffet stations" : "Local restaurant family-style catering", estCost: Math.round(food), contactTip: `Ask for a per-head quote for ${brief.guests}${brief.constraints.length ? ` incl. ${brief.constraints.join(", ")}` : ""}.` },
@@ -251,29 +253,42 @@ async function logistics(ctx: Ctx, brief: EventBrief, budget: BudgetLine[], venu
       return d.toISOString().slice(0, 10);
     };
     const list: [string, number, Task["priority"], string, AgentId][] = [
-      [`Place hold on ${venue?.name ?? "venue"} & sign contract`, Math.max(21, Math.round(days * 0.8)), "high", "Organizer", "scout"],
+      [`Place hold on ${venue?.name ?? "venue"} & sign contract`, Math.max(21, Math.round(days * 0.8)), "high", "Organizer", "venue"],
       ["Send save-the-date / open registration", Math.max(14, Math.round(days * 0.7)), "high", "Comms lead", "comms"],
-      ["Collect catering quotes (3) and book", Math.max(14, Math.round(days * 0.6)), "high", "Ops lead", "logistics"],
-      ["Book AV and photographer", Math.max(10, Math.round(days * 0.5)), "medium", "Ops lead", "logistics"],
-      ["Finalize run-of-show & roles", 7, "medium", "Organizer", "scheduler"],
+      ["Collect catering quotes (3) and book", Math.max(14, Math.round(days * 0.6)), "high", "Ops lead", "logistics_lead"],
+      ["Book AV and photographer", Math.max(10, Math.round(days * 0.5)), "medium", "Ops lead", "logistics_lead"],
+      ["Finalize run-of-show & roles", 7, "medium", "Organizer", "program"],
       ["Send reminder + logistics email", 3, "medium", "Comms lead", "comms"],
-      ["Confirm final headcount with caterer", 3, "high", "Ops lead", "budget"],
-      ["Day-of kit: signage, badges, extension cords, first aid", 1, "low", "Volunteers", "logistics"],
+      ["Confirm final headcount with caterer", 3, "high", "Ops lead", "finance"],
+      ["Day-of kit: signage, badges, extension cords, first aid", 1, "low", "Volunteers", "logistics_lead"],
     ];
-    if ((weather.precipChance ?? 0) >= 30 && venue && !venue.indoor) list.push(["Trigger rain plan decision", 2, "high", "Organizer", "logistics"]);
-    if (brief.eventType === "hackathon") list.push(["Lock judging rubric & sponsor prize list", 10, "high", "Organizer", "logistics"]);
+    if ((weather.precipChance ?? 0) >= 30 && venue && !venue.indoor) list.push(["Trigger rain plan decision", 2, "high", "Organizer", "logistics_lead"]);
+    if (brief.eventType === "hackathon") list.push(["Lock judging rubric & sponsor prize list", 10, "high", "Organizer", "logistics_lead"]);
     const tasks: Task[] = list
       .map(([title, before, priority, owner, agent], i) => ({ id: `t${i}`, title, due: due(before), owner, priority, done: false, agent }))
       .sort((a, b) => a.due.localeCompare(b.due));
-    return withLLM(ctx, "logistics", () => ({ vendors, tasks }), async (llm) => {
+    const result = await withLLM(ctx, "logistics_lead", () => ({ vendors, tasks }), async (llm) => {
       const out = await chatJSON<{ vendors: Vendor[] }>(
         llm,
-        `You are the Logistics agent. Make the vendor list specific to the city/event (realistic vendor types or well-known local options), keep estCost consistent with the budget. One entry per category; the venue is already chosen, so don't list it, and skip contingency. Return {"vendors":[{"category","suggestion","estCost","contactTip"}]}.`,
+        `You are the Logistics lead. Make the vendor list specific to the city/event (realistic vendor types or well-known local options), keep estCost consistent with the budget. One entry per category; the venue is already chosen, so don't list it, and skip contingency. Return {"vendors":[{"category","suggestion","estCost","contactTip"}]}.`,
         `Brief: ${briefJSON(brief)}\nWeather: ${weather.summary}\nBudget: ${JSON.stringify(budget)}${fb(ctx)}\nDraft vendors: ${JSON.stringify(vendors)}`,
       );
       const got = tidyVendors((out.vendors ?? []).map((v) => ({ ...v, estCost: Number(v.estCost) || 0 })), !!venue);
       return { vendors: got.length ? got : vendors, tasks };
     });
+    // The lead decides what this event needs, then distributes to one sub-agent per overarching task.
+    const SUB: { id: AgentId; test: RegExp; label: string }[] = [
+      { id: "food", test: /cater|food|drink|beverage/i, label: "food & drink" },
+      { id: "venue", test: /av|wi-?fi|power|rental|furniture|tent/i, label: "venue services" },
+      { id: "merch", test: /merch|print|shirt|sticker|signage|gift|swag/i, label: "merch & gifts" },
+      { id: "people", test: /staff|crew|volunteer|security|photo|check-?in/i, label: "people & staffing" },
+    ];
+    await Promise.all(
+      SUB.filter((s) => result.vendors.some((v) => s.test.test(v.category))).map((s) =>
+        step(ctx, s.id, `Logistics lead → ${s.label}: scoping what this event needs…`, async () => s.label, (l) => `${l} scoped`),
+      ),
+    );
+    return result;
   }, (r) => `${r.vendors.length} vendors · ${r.tasks.length} tasks scheduled`);
 }
 
@@ -299,9 +314,9 @@ async function comms(ctx: Ctx, brief: EventBrief, venue: Venue | undefined): Pro
   }, (i) => `Drafted “${i.subject.slice(0, 60)}”`);
 }
 
-// ---------------------------------------------------------------- Critic
-async function critic(ctx: Ctx, plan: Omit<EventPlan, "risks" | "score" | "summary">): Promise<{ risks: Risk[]; score: number; summary: string }> {
-  return step(ctx, "critic", "Stress-testing the plan for risks…", async () => {
+// ---------------------------------------------------------------- Verifier
+async function verifyPlan(ctx: Ctx, plan: Omit<EventPlan, "risks" | "score" | "summary">): Promise<{ risks: Risk[]; score: number; summary: string }> {
+  return step(ctx, "verifier", "Stress-testing the plan for risks…", async () => {
     const { brief, venues, selectedVenue, budget, weather, tasks } = plan;
     const venue = venues[selectedVenue];
     const risks: Risk[] = [];
@@ -330,10 +345,10 @@ async function critic(ctx: Ctx, plan: Omit<EventPlan, "risks" | "score" | "summa
       score,
       summary: `${brief.title} is a ${brief.vibe} ${brief.eventType} for ${brief.guests} in ${brief.city} on ${brief.date}. ${venue ? `Recommended venue: ${venue.name}.` : ""} Budget of ${money(brief.budget)} works out to ${money(perGuest)}/guest. ${weather ? `Weather: ${weather.summary}.` : ""}`,
     };
-    return withLLM(ctx, "critic", () => offline, async (llm) => {
+    return withLLM(ctx, "verifier", () => offline, async (llm) => {
       const out = await chatJSON<{ risks: Risk[]; summary: string }>(
         llm,
-        `You are the Critic agent. Review the event plan, keep the detected risks and add up to 2 non-obvious ones. Be concise. Note: multi-day venues are billed at a day rate (~12 billable hours/day); that is intentional, not an error. Do not re-flag detected risks (level high|medium|low, issue, mitigation). Also write a confident 2-3 sentence executive summary. Return {"risks":[...],"summary":"..."}.`,
+        `You are the Verifier agent. Review the event plan adversarially, keep the detected risks and add up to 2 non-obvious ones. Be concise. Note: multi-day venues are billed at a day rate (~12 billable hours/day); that is intentional, not an error. Do not re-flag detected risks (level high|medium|low, issue, mitigation). Also write a confident 2-3 sentence executive summary. Return {"risks":[...],"summary":"..."}.`,
         `Plan: ${JSON.stringify({ brief, venue, budget, weather, schedule: plan.schedule })}${fb(ctx)}\nDetected risks: ${JSON.stringify(risks)}`,
         { temperature: 0.4 },
       );
@@ -359,13 +374,13 @@ async function permitsAgent(ctx: Ctx, brief: EventBrief, venue: Venue | undefine
 export async function runPlanner(req: PlanRequest, emit: Emit): Promise<EventPlan> {
   const llm = getLLMConfig();
   const ctx: Ctx = { llm, emit, feedback: req.feedback };
-  think(ctx, "coordinator", llm ? `Using ${llm.model} for reasoning.` : "No LLM key configured — running the built-in offline planner (real weather tool still live).");
+  think(ctx, "exec", llm ? `Using ${llm.model} for reasoning.` : "No LLM key configured — running the built-in offline planner (real weather tool still live).");
 
-  const brief = await coordinator(ctx, req);
+  const brief = await execAgent(ctx, req);
 
   const [venues, weather] = await Promise.all([
     scout(ctx, brief),
-    tool(ctx, "logistics", "weather_forecast", `${brief.city} on ${brief.date}`, () => weatherTool(brief.city, brief.date), (w) => `${w.summary}${w.highC != null ? `, high ${Math.round(w.highC)}°C` : ""}`),
+    tool(ctx, "logistics_lead", "weather_forecast", `${brief.city} on ${brief.date}`, () => weatherTool(brief.city, brief.date), (w) => `${w.summary}${w.highC != null ? `, high ${Math.round(w.highC)}°C` : ""}`),
   ]);
   let selectedVenue = 0;
   const prevVenue = req.previous?.venues[req.previous.selectedVenue];
@@ -378,14 +393,14 @@ export async function runPlanner(req: PlanRequest, emit: Emit): Promise<EventPla
       i = 0;
     }
     selectedVenue = i;
-    think(ctx, "scout", `Keeping your chosen venue, ${prevVenue.name}.`);
+    think(ctx, "venue", `Keeping your chosen venue, ${prevVenue.name}.`);
   }
   if (!kept && (weather.precipChance ?? 0) >= 40) {
     const indoor = venues.findIndex((v) => v.indoor && v.capacity >= brief.guests && v.pricePerHour * billableHours(brief.durationHours) <= brief.budget * 0.5);
-    if (indoor < 0 && !venues[selectedVenue]?.indoor) think(ctx, "scout", `Rain risk ${weather.precipChance}%, but no indoor option fits the budget. Keeping the outdoor pick with a tent plan.`);
+    if (indoor < 0 && !venues[selectedVenue]?.indoor) think(ctx, "venue", `Rain risk ${weather.precipChance}%, but no indoor option fits the budget. Keeping the outdoor pick with a tent plan.`);
     if (indoor > 0) {
       selectedVenue = indoor;
-      think(ctx, "scout", `Rain risk ${weather.precipChance}% → switching pick to indoor ${venues[indoor].name}.`);
+      think(ctx, "venue", `Rain risk ${weather.precipChance}% → switching pick to indoor ${venues[indoor].name}.`);
     }
   }
   const venue = venues[selectedVenue];
@@ -393,7 +408,7 @@ export async function runPlanner(req: PlanRequest, emit: Emit): Promise<EventPla
   const [budget, schedule] = await Promise.all([budgetAgent(ctx, brief, venue), scheduler(ctx, brief, venue)]);
   const [{ vendors, tasks: baseTasks }, invite] = await Promise.all([logistics(ctx, brief, budget, venue, weather), comms(ctx, brief, venue)]);
   const { permits, tasks: permitTasks } = await permitsAgent(ctx, brief, venue, vendors, baseTasks);
-  const ops = await step(ctx, "logistics", "Sizing staff, food, Wi-Fi, power and sponsors…", async () => tool(ctx, "logistics", "ops_calculator", `${brief.guests} guests · ${brief.durationHours}h · ${schedule.length} schedule blocks`, () => opsPlan(brief, schedule, venue), (o) => `${o.staffing.reduce((s, x) => s + x.count, 0)} staff · ${o.meals.length} meals · ${o.checkin.lanes} check-in lanes${o.sponsors.length ? ` · $${o.sponsorTarget.toLocaleString()} sponsor target` : ""}`), (o) => `Ops sized: ${o.infra.length} infrastructure lines, ${o.policies.length} policies`);
+  const ops = await step(ctx, "logistics_lead", "Sizing staff, food, Wi-Fi, power and sponsors…", async () => tool(ctx, "logistics_lead", "ops_calculator", `${brief.guests} guests · ${brief.durationHours}h · ${schedule.length} schedule blocks`, () => opsPlan(brief, schedule, venue), (o) => `${o.staffing.reduce((s, x) => s + x.count, 0)} staff · ${o.meals.length} meals · ${o.checkin.lanes} check-in lanes${o.sponsors.length ? ` · $${o.sponsorTarget.toLocaleString()} sponsor target` : ""}`), (o) => `Ops sized: ${o.infra.length} infrastructure lines, ${o.policies.length} policies`);
   const tasks = [...permitTasks, ...opsTasks(ops, brief)].sort((a, b) => a.due.localeCompare(b.due));
 
   const draft = {
@@ -414,7 +429,7 @@ export async function runPlanner(req: PlanRequest, emit: Emit): Promise<EventPla
     mode: llm ? ("llm" as const) : ("offline" as const),
     model: llm?.model ?? "offline-heuristics",
   };
-  const review = await critic(ctx, draft);
-  if (llm) think(ctx, "coordinator", `Done: ${llm.usage.calls} model calls, ${llm.usage.promptTokens.toLocaleString()} input + ${llm.usage.completionTokens.toLocaleString()} output tokens.${ctx.fallbacks?.length ? ` ${ctx.fallbacks.length} part(s) used built-in estimates: ${ctx.fallbacks.join("; ")}.` : " Every agent used the model."}`);
+  const review = await verifyPlan(ctx, draft);
+  if (llm) think(ctx, "exec", `Done: ${llm.usage.calls} model calls, ${llm.usage.promptTokens.toLocaleString()} input + ${llm.usage.completionTokens.toLocaleString()} output tokens.${ctx.fallbacks?.length ? ` ${ctx.fallbacks.length} part(s) used built-in estimates: ${ctx.fallbacks.join("; ")}.` : " Every agent used the model."}`);
   return { ...draft, ...review, usage: llm ? { ...llm.usage } : undefined };
 }

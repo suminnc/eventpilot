@@ -1,0 +1,110 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EventPilot Autonomous Ops Swarm</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--ink:#1c1c1a;--muted:#6b6b66;--line:#e4e3de;
+    --exec:#3f4a3a;--log:#4f6146;--fin:#8a6d3b;--sup:#6b5a7a;--warn:#a8452f;--ok:#3f6b4a;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:1000px;margin:0 auto;padding:40px 24px 72px}
+  h1{font-size:29px;margin:0 0 4px;letter-spacing:-.02em}
+  .sub{color:var(--muted);margin:0 0 20px}
+  .badge{display:inline-block;font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    background:#e6efe6;color:var(--ok);padding:3px 9px;border-radius:20px;vertical-align:middle;margin-left:8px}
+  h2{font-size:16px;margin:34px 0 12px;text-transform:uppercase;letter-spacing:.02em;color:var(--muted);font-weight:600}
+  .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .card h3{margin:0 0 6px;font-size:14px}
+  .card p{margin:0;font-size:13.5px;color:var(--muted)}
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;background:#eceae2;color:var(--muted);margin-bottom:6px}
+  .pill.e{background:#e3e7e0;color:var(--exec)} .pill.l{background:#e6efe6;color:var(--log)}
+  .pill.f{background:#f2ead9;color:var(--fin)} .pill.s{background:#ece7f0;color:var(--sup)}
+  .dag{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:22px 18px}
+  .lane{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:stretch}
+  .node{border-radius:9px;padding:9px 13px;color:#fff;min-width:130px;text-align:left}
+  .node .t{font-weight:700;font-size:13px} .node .d{font-size:11.5px;opacity:.86}
+  .exec{background:var(--exec)} .log{background:var(--log)} .fin{background:var(--fin)} .sup{background:var(--sup)}
+  .neutral{background:#8d8d85}
+  .conn{height:16px;width:2px;background:var(--line);margin:6px auto}
+  .hint{text-align:center;color:var(--muted);font-size:12px;margin:2px 0 0}
+  ol.loop{counter-reset:s;list-style:none;padding:0;margin:0;background:var(--card);border:1px solid var(--line);border-radius:10px}
+  ol.loop li{counter-increment:s;position:relative;padding:11px 16px 11px 50px;border-bottom:1px solid var(--line);font-size:14px}
+  ol.loop li:last-child{border-bottom:none}
+  ol.loop li::before{content:counter(s);position:absolute;left:16px;top:11px;width:23px;height:23px;border-radius:50%;
+    background:var(--log);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  th,td{text-align:left;padding:10px 13px;border-bottom:1px solid var(--line);font-size:13.5px;vertical-align:top}
+  th{background:#f0efe9;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  tr:last-child td{border-bottom:none}
+  code{background:#efece4;padding:1px 5px;border-radius:4px;font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>EventPilot Autonomous Ops Swarm <span class="badge">registered · v2.0.0</span></h1>
+  <p class="sub">Autonomous workflow agent — no mid-run human input, with the Finance veto and an independent verification pass doing the checking and balancing.</p>
+
+  <h2>Roster as built</h2>
+  <div class="grid">
+    <div class="card"><span class="pill e">EXEC ×1</span><h3>Owner of delivery</h3><p>Scope, attendee-experience rubric, budget envelope, decision rights, over-budget approval, day-of command, final approval.</p></div>
+    <div class="card"><span class="pill l">LOGISTICS LEAD ×1</span><h3>Scopes, then distributes</h3><p>Decides what this event actually requires, writes the Projects Tracker skeleton, assigns sub-agents, reconciles the final plan.</p></div>
+    <div class="card"><span class="pill l">SUB-AGENTS ×5</span><h3>One per overarching task</h3><p>Food · Venue &amp; Services · Program &amp; Run-of-show · Merch &amp; Gifts · People Logistics (optional, says NOT NEEDED when it doesn't apply).</p></div>
+    <div class="card"><span class="pill f">FINANCE ×1</span><h3>The affordability gate</h3><p>Budget-line cap, 50% deposit cap, payment method, running total, ledger reconciliation — and a real veto.</p></div>
+    <div class="card"><span class="pill s">SPONSORSHIP ×1</span><h3>The revenue lever</h3><p>Deal Sheet, tier pricing, signed-contract-only revenue, full fulfillment checklist on signing. Says NOT APPLICABLE with no sponsors.</p></div>
+    <div class="card"><span class="pill s">COMMS ×1</span><h3>The attendee voice</h3><p>Attendee guide and the T-10d / T-3d / day-of reminder sequence, matched to the run-of-show.</p></div>
+  </div>
+
+  <h2>The DAG</h2>
+  <div class="dag">
+    <div class="lane"><div class="node exec"><span class="t">exec_scope</span><div class="d">rubric · envelope · guardrails · decision rights</div></div></div>
+    <div class="conn"></div>
+    <div class="lane">
+      <div class="node log"><span class="t">logistics_plan</span><div class="d">lead scopes required categories</div></div>
+      <div class="node sup"><span class="t">revenue</span><div class="d">sponsorship</div></div>
+      <div class="node sup"><span class="t">comms</span><div class="d">attendee guide</div></div>
+    </div>
+    <div class="conn"></div>
+    <div class="lane">
+      <div class="node log"><span class="t">cat_food</span></div>
+      <div class="node log"><span class="t">cat_venue</span></div>
+      <div class="node log"><span class="t">cat_program</span></div>
+      <div class="node log"><span class="t">cat_merch</span></div>
+      <div class="node log"><span class="t">cat_people</span></div>
+    </div>
+    <p class="hint">fan-out runs in parallel (maxConcurrency 6) · each category returns 3 quotes on one spec, a below-budget anchor and a nonprofit-discount ask</p>
+    <div class="conn"></div>
+    <div class="lane"><div class="node fin"><span class="t">finance_gate</span><div class="d">approve / condition / VETO · ledger reconcile</div></div></div>
+    <div class="conn"></div>
+    <div class="lane"><div class="node log"><span class="t">reconcile</span><div class="d">one plan, one owner per row · escalate deadlocks</div></div></div>
+    <div class="conn"></div>
+    <div class="lane"><div class="node neutral"><span class="t">verify</span><div class="d">independent · assumes every deliverable is wrong</div></div></div>
+    <div class="conn"></div>
+    <div class="lane"><div class="node exec"><span class="t">exec_approve</span><div class="d">resolve open decisions · publish this week</div></div></div>
+  </div>
+
+  <h2>What actually makes them check each other</h2>
+  <ol class="loop">
+    <li><b>Decision rights, not vibes.</b> Exec = scope and over-budget approval; Logistics lead = what's needed and which vendor; Finance = affordability veto; sub-agents = options and trade-offs.</li>
+    <li><b>Bounded disagreement.</b> Quality-vs-cost survives at most 2 negotiation rounds, then it escalates to an Exec decision memo with the cost delta and experience impact.</li>
+    <li><b>A real veto.</b> Finance marks each item APPROVED / APPROVED WITH CONDITION / VETOED, and reconcile must resolve every veto before anything proceeds.</li>
+    <li><b>Adversarial verification.</b> A separate verifier that wrote none of the deliverables checks ownership, dates against the T-minus gates, unsigned spend counted as committed, and unsourced numbers.</li>
+    <li><b>Hard guardrails.</b> 10–15% contingency, deposits ≤ 50%, no spend without a signed quote/contract, >5% variance needs Exec sign-off.</li>
+  </ol>
+
+  <h2>Run inputs</h2>
+  <table>
+    <thead><tr><th style="width:22%">Field</th><th style="width:14%">Required</th><th>What goes in it</th></tr></thead>
+    <tbody>
+      <tr><td><code>event_context</code></td><td>yes</td><td>Event name, date, venue, expected headcount, budget, sponsors, current status.</td></tr>
+      <tr><td><code>objective</code></td><td>yes</td><td>What this autonomous run should accomplish.</td></tr>
+      <tr><td><code>constraints</code></td><td>no</td><td>Hard constraints — fixed dates, venue rules, must-use vendors, budget ceiling.</td></tr>
+    </tbody>
+  </table>
+  <p class="sub" style="margin-top:14px">Final output: <code>files/eventpilot_ops_package.md</code> — one consolidated tracker with a single owner per row, a flag register, the this-week action list, and an explicit list of anything that could not be verified.</p>
+</div>
+</body>
+</html>

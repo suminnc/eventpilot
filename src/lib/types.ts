@@ -86,7 +86,7 @@ export type EventPlan = {
   weather: Weather | null;
   invite: { subject: string; body: string; sms: string };
   risks: Risk[];
-  score: number; // critic confidence 0-100
+  score: number; // verifier confidence 0-100
   mode: "llm" | "offline";
   model: string;
   usage?: { calls: number; promptTokens: number; completionTokens: number };
@@ -217,13 +217,17 @@ export type Autopilot = {
 };
 
 export type AgentId =
-  | "coordinator"
-  | "scout"
-  | "budget"
-  | "scheduler"
-  | "logistics"
+  | "exec"
+  | "logistics_lead"
+  | "venue"
+  | "food"
+  | "program"
+  | "merch"
+  | "people"
+  | "finance"
+  | "sponsorship"
   | "comms"
-  | "critic"
+  | "verifier"
   | "permits"
   | "payments";
 
@@ -236,14 +240,23 @@ export type AgentEvent =
   | { type: "plan"; plan: EventPlan; ts: number }
   | { type: "error"; message: string; ts: number };
 
+/**
+ * The organizing crew follows the subteam model: one Exec owns delivery and the attendee experience,
+ * a Logistics lead scopes the event and distributes to one sub-agent per overarching task, Finance gates
+ * every dollar, Sponsorship owns revenue and Comms owns the attendee voice, and a Verifier closes the loop.
+ */
 export const AGENTS: Record<AgentId, { name: string; role: string; color: string }> = {
-  coordinator: { name: "Coordinator", role: "Parses intent & delegates", color: "#a78bfa" },
-  scout: { name: "Venue Scout", role: "Finds & ranks venues", color: "#38bdf8" },
-  budget: { name: "Budget Analyst", role: "Allocates every dollar", color: "#34d399" },
-  scheduler: { name: "Scheduler", role: "Builds run-of-show", color: "#fbbf24" },
-  logistics: { name: "Logistics", role: "Vendors, weather, tasks", color: "#fb923c" },
-  comms: { name: "Comms", role: "Invites & reminders", color: "#f472b6" },
-  critic: { name: "Critic", role: "Stress-tests the plan", color: "#f87171" },
+  exec: { name: "Exec", role: "Owns delivery & attendee experience", color: "#a78bfa" },
+  logistics_lead: { name: "Logistics Lead", role: "Scopes the event & distributes", color: "#fb923c" },
+  venue: { name: "Venue & Services", role: "Venue, wifi, power, A/V, floorplan", color: "#38bdf8" },
+  food: { name: "Food", role: "Catering, dietary, portions", color: "#f97316" },
+  program: { name: "Program & Run-of-show", role: "Agenda & day-of timing", color: "#fbbf24" },
+  merch: { name: "Merch & Gifts", role: "Swag, print, prizes, signage art", color: "#e879f9" },
+  people: { name: "People Logistics", role: "Buses, hotels, parking, travel", color: "#60a5fa" },
+  finance: { name: "Finance", role: "Budget, cost gate & payments", color: "#34d399" },
+  sponsorship: { name: "Sponsorship", role: "Revenue & sponsor deliverables", color: "#f472b6" },
+  comms: { name: "Comms", role: "Attendee guide & reminders", color: "#c084fc" },
+  verifier: { name: "Verifier", role: "Adversarially checks the plan", color: "#f87171" },
   permits: { name: "Permits", role: "Permits & compliance", color: "#a3e635" },
   payments: { name: "Payments", role: "Guarded agentic checkout", color: "#22d3ee" },
 };

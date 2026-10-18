@@ -11,10 +11,11 @@ import type { AuditEntry, Autopilot, EventBrief, EventPlan, OutboxMessage, Purch
 export function defaultMandate(plan: EventPlan): SpendMandate {
   const b = plan.brief.budget;
   const contingency = plan.budget.find((l) => /contingency/i.test(l.category))?.amount ?? 0;
+  const totalCap = b - contingency;
   return {
-    totalCap: b - contingency,
+    totalCap,
     perPurchaseCap: Math.round(b * 0.3),
-    approvalThreshold: Math.max(250, Math.round(b * 0.02)),
+    approvalThreshold: totalCap,
     allowedCategories: Array.from(new Set(["Venue", ...plan.vendors.map((v) => v.category), ...(plan.permits?.length ? ["Permits"] : []), ...(plan.ops ? ["Staffing"] : [])])),
   };
 }

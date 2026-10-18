@@ -47,7 +47,7 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
             <p className="mt-1.5 max-w-2xl text-sm leading-[21px] text-muted">Your agents shop, compare and pay only inside these limits. Anything over the approval line waits for you. Each payment gets its own single-use card, and every action is written to a tamper-evident log.</p>
           </div>
           <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-3">
-            <Num label="Total cap" value={mandate.totalCap} onChange={(v) => setMandate({ ...mandate, totalCap: v })} disabled={running} />
+            <Num label="Total cap" value={mandate.totalCap} onChange={(v) => setMandate({ ...mandate, totalCap: v, approvalThreshold: mandate.approvalThreshold === mandate.totalCap ? v : mandate.approvalThreshold })} disabled={running} />
             <Num label="Per-purchase cap" value={mandate.perPurchaseCap} onChange={(v) => setMandate({ ...mandate, perPurchaseCap: v })} disabled={running} />
             <Num label="Ask me above" value={mandate.approvalThreshold} onChange={(v) => setMandate({ ...mandate, approvalThreshold: v })} disabled={running} />
           </div>

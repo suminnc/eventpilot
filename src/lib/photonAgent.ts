@@ -277,7 +277,7 @@ export async function handleInbound(text: string, id: string) {
     if (mailConfig()) {
       a.working = "Emailing vendors";
       const { sent, failed } = await sendAutoDrafts().finally(() => (a.working = null));
-      await reply(`Done. Compared quotes and set a target price for each vendor${saved > 0 ? ` (${money(saved)} under list)` : ""}. Emailed ${sent} of ${drafted} vendors and permit offices${failed.length ? ` (${failed.length} failed: ${failed[0]})` : ""}; I check replies every 5 seconds, negotiate, and text you before any deposit.${pending.length ? ` ${pending.length} decision${pending.length === 1 ? "" : "s"} coming next.` : ""}`);
+      await reply(`Done. Compared quotes and set a target price for each vendor${saved > 0 ? ` (${money(saved)} under list)` : ""}. Emailed ${sent} of ${drafted} vendors and permit offices${failed.length ? ` (${failed.length} failed: ${failed[0]})` : ""}; I check replies every 5 seconds, negotiate, and text you every booking.${pending.length ? ` ${pending.length} decision${pending.length === 1 ? "" : "s"} coming next.` : ""}`);
     } else await reply(
       `Done. ${saved > 0 ? `Negotiated ${money(saved)} off vendor quotes. ` : ""}Paid ${auto.length} deposit${auto.length === 1 ? "" : "s"} (${money(auto.reduce((s, x) => s + x.amount, 0))}) on single-use cards; ${money(committed(ap.purchases))} committed of ${money(ap.mandate.totalCap)}.${pending.length ? ` ${pending.length} need${pending.length === 1 ? "s" : ""} your OK, details next.` : " Nothing needs you."}`,
     );

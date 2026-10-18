@@ -7,6 +7,7 @@ import { appendAudit, committed, defaultMandate, emptyAutopilot, negotiatedSavin
 import { runPlanner } from "./agents/orchestrator";
 import { answerQuestion } from "./answer";
 import { getLLMConfig } from "./llm";
+import { thisWeekText } from "./workflow";
 
 /**
  * Server-side Photon agent: polls the organizer's iMessages and acts on them even when no browser is open.
@@ -168,6 +169,8 @@ export async function handleInbound(text: string, id: string) {
     await notifyDecisions();
     return;
   }
+
+  if (/^(this week|week|workflow|todo|to do|whats due|timeline)$/.test(low)) return reply(thisWeekText(p));
 
   const neg = low.match(/^(?:negotiate|negotiation|savings|deals?)(?:\s+([a-z &]+))?$/);
   if (neg) return reply(p.autopilot ? negotiationText(p, neg[1]?.trim()) : "I haven't negotiated yet. Text RUN and I'll get quotes and haggle first.");

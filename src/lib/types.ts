@@ -91,6 +91,7 @@ export type EventPlan = {
   model: string;
   usage?: { calls: number; promptTokens: number; completionTokens: number };
   autopilot?: Autopilot;
+  workflowDone?: string[];
 };
 
 export type SpendMandate = {

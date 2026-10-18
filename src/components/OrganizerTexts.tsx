@@ -79,7 +79,7 @@ export function OrganizerTexts(props: { plan: EventPlan; onChange: (p: EventPlan
           {live.error
             ? `Photon: ${live.error}. Decisions still work with the buttons above.`
             : live.linked
-              ? `EventPilot is live on iMessage at ${live.agent}, even with this page closed. From ${live.organizer}, text YES 2, PICK CATERING 3, RUN, NEGOTIATE, STATUS, PLAN <new event>, or ask anything.`
+              ? `EventPilot is live on iMessage at ${live.agent}, even with this page closed. From ${live.organizer}, text YES 2, PICK CATERING 3, RUN, NEGOTIATE, THIS WEEK, STATUS, PLAN <new event>, or ask anything.`
               : `Text "hi" to ${live.agent} from ${live.organizer} once so EventPilot can reach you.`}
         </p>
         <Thread texts={thread} typing={live.working ? `EventPilot: ${live.working.toLowerCase()}` : null} empty="No texts yet. Pending decisions are texted to your phone a few seconds after Autopilot runs." />

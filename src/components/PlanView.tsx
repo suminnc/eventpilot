@@ -10,9 +10,10 @@ import { AGENTS } from "@/lib/types";
 import { planToICS, planToMarkdown } from "@/lib/export";
 import { AutopilotPanel } from "./AutopilotPanel";
 import { reselectVenue } from "@/lib/replan";
+import { WorkflowTab } from "./WorkflowTab";
 
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
-const TABS = ["Overview", "Schedule", "Budget", "Venues", "Tasks", "Permits", "Ops", "Invite", "Autopilot"] as const;
+const TABS = ["Overview", "Workflow", "Schedule", "Budget", "Venues", "Tasks", "Permits", "Ops", "Invite", "Autopilot"] as const;
 type Tab = (typeof TABS)[number];
 // Budget categories: sage, sky and earth tones that sit with the brand accent.
 const COLORS = ["#4f6146", "#7e9a6e", "#a9bc97", "#4d6b7d", "#86a3b4", "#bccdd8", "#8c7a5b", "#b8a07a", "#5f6570", "#a3a8b0"];
@@ -230,6 +231,8 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
             })}
           </div>
         )}
+
+        {tab === "Workflow" && <WorkflowTab plan={plan} onChange={onChange} />}
 
         {tab === "Ops" && <OpsTab plan={plan} />}
 

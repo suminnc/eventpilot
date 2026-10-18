@@ -51,6 +51,10 @@ curl -X POST localhost:3000/api/plan  -d '{"prompt":"Plan Cal Hacks 13.0 in SF, 
 curl -X POST localhost:3000/api/agent -d '{"prompt":"..."}'                                                   # { plan, markdown }
 ```
 
+### CREAO (independent Ops Team review)
+
+The CREAO agent `6cb5afb7-e632-436d-b330-82772ec7a7ca` (agent.creao.ai) reviews every plan the Ops Team books. Set `CREAO_API_KEY` (capi_…, server only) and `CREAO_APP_ID`; EventPilot calls the API Trigger from the server, polls the async run (up to 10 min) and texts the verdict. Run share link: *(team: paste from the agent page)*. Agent instructions: [docs/creao-swarm-agent.md](docs/creao-swarm-agent.md).
+
 ### Fetch.ai / ASI:One
 
 ```bash
@@ -59,7 +63,7 @@ EVENTPILOT_URL=https://<deploy>/api/agent AGENT_SEED="<secret>" python eventpilo
 ```
 
 ## Prize tracks
-Target tracks: Creao, Visa, Workday, Paper, Cognition/Devin, and Photon (messaging agent). The write-up for each is in [SUBMISSION.md](SUBMISSION.md). It also fits Applied Intelligence, the Fetch.ai ASI:One challenge, and StepFun.
+Target tracks: Photon (messaging agent), CREAO (Best One-Person Company), Visa, Cognition/Devin, StepFun (every plan calls `step-5-preview`), Workday and Paper. The write-up for each is in [SUBMISSION.md](SUBMISSION.md). It also fits Applied Intelligence, the Fetch.ai ASI:One challenge, and StepFun.
 
 ## Stack
 Next.js 15 (App Router) · React 19 · Tailwind v4 · TypeScript · lucide-react. Venue rates are planning estimates, not quotes.

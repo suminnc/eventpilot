@@ -20,7 +20,7 @@ async function call(path: string, key: string, init: RequestInit = {}): Promise<
 }
 
 /** Runs the CREAO swarm agent and waits (polling) up to timeoutMs for its answer. */
-export async function runCreaoAgent(inputs: Record<string, string>, timeoutMs = 240_000): Promise<{ ok: true; text: string; runId: string } | { ok: false; error: string }> {
+export async function runCreaoAgent(inputs: Record<string, string>, timeoutMs = 600_000): Promise<{ ok: true; text: string; runId: string } | { ok: false; error: string }> {
   const c = creaoConfig();
   if (!c) return { ok: false, error: "CREAO not configured" };
   try {

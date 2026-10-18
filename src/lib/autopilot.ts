@@ -1,4 +1,4 @@
-import type { AuditEntry, Autopilot, EventBrief, EventPlan, OutboxMessage, Purchase, Quote, Round, Shortlist, SpendMandate } from "./types";
+import type { AuditEntry, Autopilot, EventBrief, EventPlan, OutboxMessage, Purchase, Quote, Round, Shortlist, SpendMandate, Vendor } from "./types";
 
 /**
  * Autopilot: turns a plan into executed actions (outreach + guarded purchases).
@@ -109,7 +109,8 @@ export function planSteps(plan: EventPlan, mandate: SpendMandate): AutopilotStep
     steps.push(buy(venue.name, "Venue", "Venue deposit (30%)", venueLine * 0.3, /hold on/i));
   }
 
-  for (const v of plan.vendors) {
+  const vendors = tidyVendors(plan.vendors, !!venue);
+  for (const v of vendors) {
     const listed = shortlist(b, v.category, v.estCost);
     const sl = negotiateShortlist(b, listed);
     const q = sl.quotes[sl.pick];
@@ -149,7 +150,7 @@ export function planSteps(plan: EventPlan, mandate: SpendMandate): AutopilotStep
   if (ops) {
     const hrs = b.durationHours;
     const guards = ops.staffing.find((x) => /security/i.test(x.role))?.count ?? 0;
-    if (guards) steps.push(buy("Licensed security contractor", "Staffing", "Security deposit (25%)", guards * hrs * 55 * 0.25, /security guards/i, `${guards} guards × ${hrs}h at ~$55/h`));
+    if (guards && !vendors.some((v) => /secur/i.test(v.category))) steps.push(buy("Licensed security contractor", "Staffing", "Security deposit (25%)", guards * hrs * 55 * 0.25, /security guards/i, `${guards} guards × ${hrs}h at ~$55/h`));
     const medic = ops.staffing.find((x) => /emt/i.test(x.role));
     if (medic) steps.push(buy("Event medical services", "Staffing", "EMT coverage deposit (25%)", medic.count * hrs * 120 * 0.25, /emt|first aid/i, `${medic.count} EMT × ${hrs}h at ~$120/h`));
     const sponsorTask = plan.tasks.find((t) => /close sponsors/i.test(t.title))?.id;
@@ -243,6 +244,38 @@ const MERCHANTS: Record<string, [string, string[]][]> = {
     ["Northbeach Films", ["video", "aftermovie"]],
     ["Candid Cable Car", ["photo", "same-day edits"]],
   ],
+  Swag: [
+    ["UltraPress Apparel", ["shirts", "high-volume"]],
+    ["Jukebox Print", ["stickers", "signage", "budget"]],
+    ["Wizard Pins", ["pins"]],
+    ["Bay Merch Works", ["shirts", "totes", "budget"]],
+    ["Fresh Prints Custom", ["shirts", "high-volume"]],
+    ["Golden Bear Promo", ["bottles", "totes"]],
+  ],
+  Staffing: [
+    ["Pinnacle Event Security", ["licensed", "crowd management"]],
+    ["Bay Guard Services", ["licensed", "budget"]],
+    ["Civic Event Staffing", ["ushers", "check-in"]],
+    ["Sentinel Protective Group", ["licensed", "overnight"]],
+    ["Crowd Control Pros", ["crowd management", "overnight"]],
+    ["Campus Crew Staffing", ["check-in", "budget"]],
+  ],
+  Marketing: [
+    ["Precision Graphics", ["banners", "signage"]],
+    ["Jukebox Signage", ["signage", "budget"]],
+    ["Fog City Print Shop", ["posters", "budget"]],
+    ["Social Spark Studio", ["social", "video"]],
+    ["Bay Area Event Promo", ["social", "email"]],
+    ["Market Street Printing", ["banners", "posters"]],
+  ],
+  Prizes: [
+    ["Tango Rewards", ["gift cards"]],
+    ["Seeed Studio Store", ["hardware"]],
+    ["B&H Photo Corporate", ["hardware", "cameras"]],
+    ["Giftbit", ["gift cards", "budget"]],
+    ["Adafruit Industries", ["hardware", "budget"]],
+    ["Bambu Lab Education", ["3d printers"]],
+  ],
   Rentals: [
     ["Canopy & Co.", ["tents", "heaters"]],
     ["Party Rental Depot", ["budget"]],
@@ -252,6 +285,26 @@ const MERCHANTS: Record<string, [string, string[]][]> = {
     ["AccessAble Event Supply", ["ada", "accessible"]],
   ],
 };
+function merchantsFor(category: string) {
+  const c = category.toLowerCase();
+  const key = /cater|food|meal|drink|snack/.test(c) ? "Catering" : /\bav\b|wi-?fi|audio|network|power|tech/.test(c) ? "AV" : /photo|video|film/.test(c) ? "Photography"
+    : /swag|merch|shirt/.test(c) ? "Swag" : /secur|staff/.test(c) ? "Staffing" : /market|print|signage|promo/.test(c) ? "Marketing" : /prize|award/.test(c) ? "Prizes" : /rental|tent|furniture/.test(c) ? "Rentals" : "";
+  return MERCHANTS[key];
+}
+
+/** One entry per category, no venue (Scout books it) and no contingency (not a vendor). Merges model-generated duplicates. */
+export function tidyVendors(vendors: Vendor[], hasVenue: boolean): Vendor[] {
+  const out: Vendor[] = [];
+  for (const v of vendors) {
+    const c = v.category.trim();
+    if ((hasVenue && /^venue/i.test(c)) || /contingency|buffer|reserve/i.test(c)) continue;
+    const same = out.find((x) => x.category.toLowerCase() === c.toLowerCase());
+    if (same) Object.assign(same, { estCost: same.estCost + v.estCost, suggestion: `${same.suggestion}; ${v.suggestion}` });
+    else out.push({ ...v, category: c });
+  }
+  return out;
+}
+
 const SHAPES = [
   { mult: 1.0, rating: 4.6, leadDays: 5, cancellable: true },
   { mult: 0.84, rating: 4.1, leadDays: 12, cancellable: false },
@@ -265,7 +318,7 @@ const daysUntil = (date: string) => Math.ceil((new Date(`${date}T00:00:00`).getT
 
 /** Discovery + decision: gathers 3 quotes for a category and picks one, scored against the brief. */
 export function shortlist(brief: EventBrief, category: string, target: number): Shortlist {
-  const names = MERCHANTS[category] ?? ([["Partners", []], ["Budget Co.", ["budget"]], ["Premier", []], ["Collective", []], ["Express", []], ["Local", ["budget"]]] as [string, string[]][]).map(([n, t]) => [`${category} ${n}`, t] as [string, string[]]);
+  const names = merchantsFor(category) ?? ([["Bay Area {c} Co.", []], ["{c} Collective", ["budget"]], ["Premier {c}", []], ["Golden Gate {c}", []], ["{c} Express", []], ["Mission {c} Works", ["budget"]]] as [string, string[]][]).map(([n, t]) => [n.replace("{c}", category), t] as [string, string[]]);
   const quotes: Quote[] = names.map(([vendor, tags], i) => {
     const sh = SHAPES[(i + fnv(category).charCodeAt(0)) % SHAPES.length];
     return { vendor, tags, price: Math.round((target * sh.mult) / 50) * 50, rating: sh.rating, leadDays: sh.leadDays, cancellable: sh.cancellable };

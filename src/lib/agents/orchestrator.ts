@@ -1,3 +1,4 @@
+import { tidyVendors } from "../autopilot";
 import { chatJSON, getLLMConfig, type LLMConfig } from "../llm";
 import { applyFeedbackOffline, parseBriefOffline } from "../parse";
 import { namePattern, billableHours, venueSearchTool, weatherTool } from "../tools";
@@ -267,10 +268,11 @@ async function logistics(ctx: Ctx, brief: EventBrief, budget: BudgetLine[], venu
     return withLLM(ctx, "logistics", () => ({ vendors, tasks }), async (llm) => {
       const out = await chatJSON<{ vendors: Vendor[] }>(
         llm,
-        `You are the Logistics agent. Make the vendor list specific to the city/event (realistic vendor types or well-known local options), keep estCost consistent with the budget. Return {"vendors":[{"category","suggestion","estCost","contactTip"}]}.`,
+        `You are the Logistics agent. Make the vendor list specific to the city/event (realistic vendor types or well-known local options), keep estCost consistent with the budget. One entry per category; the venue is already chosen, so don't list it, and skip contingency. Return {"vendors":[{"category","suggestion","estCost","contactTip"}]}.`,
         `Brief: ${briefJSON(brief)}\nWeather: ${weather.summary}\nBudget: ${JSON.stringify(budget)}${fb(ctx)}\nDraft vendors: ${JSON.stringify(vendors)}`,
       );
-      return { vendors: out.vendors?.length ? out.vendors.map((v) => ({ ...v, estCost: Number(v.estCost) || 0 })) : vendors, tasks };
+      const got = tidyVendors((out.vendors ?? []).map((v) => ({ ...v, estCost: Number(v.estCost) || 0 })), !!venue);
+      return { vendors: got.length ? got : vendors, tasks };
     });
   }, (r) => `${r.vendors.length} vendors · ${r.tasks.length} tasks scheduled`);
 }

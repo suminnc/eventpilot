@@ -3,6 +3,7 @@ import { applyFeedbackOffline, parseBriefOffline } from "../parse";
 import { billableHours, venueSearchTool, weatherTool } from "../tools";
 import { linkPermitTasks, permitChecklist } from "../permits";
 import { allocateBudget } from "../budget";
+import { opsPlan, opsTasks } from "../ops";
 import type {
   AgentEvent,
   AgentId,
@@ -361,7 +362,9 @@ export async function runPlanner(req: PlanRequest, emit: Emit): Promise<EventPla
   ]);
   let selectedVenue = 0;
   const prevVenue = req.previous?.venues[req.previous.selectedVenue];
+  let kept = false;
   if (prevVenue && !/venue|indoor|outdoor|cheaper|cut|reduce|lower/i.test(req.feedback ?? "") && prevVenue.capacity >= brief.guests) {
+    kept = true;
     let i = venues.findIndex((v) => v.name === prevVenue.name);
     if (i < 0) {
       venues.unshift(prevVenue);
@@ -370,8 +373,9 @@ export async function runPlanner(req: PlanRequest, emit: Emit): Promise<EventPla
     selectedVenue = i;
     think(ctx, "scout", `Keeping your chosen venue, ${prevVenue.name}.`);
   }
-  if ((weather.precipChance ?? 0) >= 40) {
-    const indoor = venues.findIndex((v) => v.indoor);
+  if (!kept && (weather.precipChance ?? 0) >= 40) {
+    const indoor = venues.findIndex((v) => v.indoor && v.capacity >= brief.guests && v.pricePerHour * billableHours(brief.durationHours) <= brief.budget * 0.5);
+    if (indoor < 0 && !venues[selectedVenue]?.indoor) think(ctx, "scout", `Rain risk ${weather.precipChance}%, but no indoor option fits the budget. Keeping the outdoor pick with a tent plan.`);
     if (indoor > 0) {
       selectedVenue = indoor;
       think(ctx, "scout", `Rain risk ${weather.precipChance}% → switching pick to indoor ${venues[indoor].name}.`);
@@ -381,7 +385,9 @@ export async function runPlanner(req: PlanRequest, emit: Emit): Promise<EventPla
 
   const [budget, schedule] = await Promise.all([budgetAgent(ctx, brief, venue), scheduler(ctx, brief, venue)]);
   const [{ vendors, tasks: baseTasks }, invite] = await Promise.all([logistics(ctx, brief, budget, venue, weather), comms(ctx, brief, venue)]);
-  const { permits, tasks } = await permitsAgent(ctx, brief, venue, vendors, baseTasks);
+  const { permits, tasks: permitTasks } = await permitsAgent(ctx, brief, venue, vendors, baseTasks);
+  const ops = await step(ctx, "logistics", "Sizing staff, food, Wi-Fi, power and sponsors…", async () => tool(ctx, "logistics", "ops_calculator", `${brief.guests} guests · ${brief.durationHours}h · ${schedule.length} schedule blocks`, () => opsPlan(brief, schedule, venue), (o) => `${o.staffing.reduce((s, x) => s + x.count, 0)} staff · ${o.meals.length} meals · ${o.checkin.lanes} check-in lanes${o.sponsors.length ? ` · $${o.sponsorTarget.toLocaleString()} sponsor target` : ""}`), (o) => `Ops sized: ${o.infra.length} infrastructure lines, ${o.policies.length} policies`);
+  const tasks = [...permitTasks, ...opsTasks(ops, brief)].sort((a, b) => a.due.localeCompare(b.due));
 
   const draft = {
     id: req.previous?.id ?? crypto.randomUUID(),
@@ -395,6 +401,7 @@ export async function runPlanner(req: PlanRequest, emit: Emit): Promise<EventPla
     tasks: tasks.map((t) => ({ ...t, done: !!req.previous?.tasks.some((x) => x.done && x.title === t.title) })),
     vendors,
     permits,
+    ops,
     weather,
     invite,
     mode: llm ? ("llm" as const) : ("offline" as const),

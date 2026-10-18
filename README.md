@@ -2,7 +2,7 @@
 
 Built for **LA Hacks: AI Hackathon 2026** ([tracks](https://live.lahacks.com/tracks)). The flagship demo plans **Cal Hacks 13.0**.
 
-You describe an event in plain English. A **Coordinator** agent turns that into a structured brief and hands the work to six specialist agents. You can watch each agent's reasoning and tool calls stream live:
+You describe an event in plain English. A **Coordinator** agent turns that into a structured brief and hands the work to seven specialist agents. You can watch each agent's reasoning and tool calls stream live:
 
 | Agent | Job | Tools |
 |---|---|---|
@@ -10,13 +10,15 @@ You describe an event in plain English. A **Coordinator** agent turns that into 
 | Venue Scout | Finds and ranks venues by capacity, cost, and vibe | `venue_search` (curated LA + Bay Area catalog) |
 | Budget Analyst | Splits the budget into line items and keeps a contingency | `budget_calculator` |
 | Scheduler | Builds a run-of-show that can span several days | template + LLM |
-| Logistics | Picks vendors, builds a timeline of tasks, checks weather | `weather_forecast` (live [Open-Meteo](https://open-meteo.com), no key) |
+| Logistics | Picks vendors, builds a timeline of tasks, checks weather, sizes ops (staff, food, Wi-Fi, power, sponsors) | `weather_forecast` (live [Open-Meteo](https://open-meteo.com), no key), `ops_calculator` |
 | Comms | Writes the invite email and an SMS reminder | LLM |
+| Permits | Lists likely permits for the city and venue, with agency, lead time, estimated fee and a file-by date | `permit_lookup` (SF, LA, Berkeley, Oakland rules) |
 | Critic | Checks the plan for risks and scores confidence from 0 to 100 | rule checks + LLM |
 
-Order of work: the Coordinator runs first. Scout and Weather run in parallel, then Budget and Scheduler, then Logistics and Comms, and the Critic runs last. Every agent has an **LLM path** and a **deterministic offline path**, so the demo still works without a key or Wi-Fi to an LLM provider. Only the weather tool needs internet.
+Order of work: the Coordinator runs first. Scout and Weather run in parallel, then Budget and Scheduler, then Logistics and Comms, then Permits, and the Critic runs last. Every agent has an **LLM path** and a **deterministic offline path**, so the demo still works without a key or Wi-Fi to an LLM provider. Only the weather tool needs internet.
 
 Other features:
+- **Ops tab**: a readiness score with the open blockers, staffing and safety (volunteer shifts, security, EMTs, mentors, judges), infrastructure sizing (Wi-Fi access points and bandwidth, power circuits, tables, restrooms, trash), meal servings split by diet, sponsor tiers with net cost, the policies to publish, and a day-of run sheet. All of it is computed from headcount and duration using planning rules of thumb.
 - **Autopilot**: agents carry out the plan. They draft venue holds, vendor RFQs and the invite, and request deposits through a **Payments agent** that works under a spend mandate with step-up approval, single-use virtual cards (simulated), idempotency keys, and a hash-chained audit log.
 - Refine a plan in follow-up chat, e.g. "make it 20% cheaper" or "add 500 more hackers".
 - Pick an alternate venue, check off tasks, and copy the invite or SMS.

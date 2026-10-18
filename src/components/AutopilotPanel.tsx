@@ -40,12 +40,12 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
   const intact = a ? verifyAudit(a.audit) : true;
 
   return (
-    <div className="grid gap-6">
-      <div className="grid gap-4 rounded-xl border border-white/10 bg-white/[0.02] p-4 md:grid-cols-[1fr_auto]">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 [overflow-wrap:anywhere]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 rounded-xl border border-white/10 bg-white/[0.02] p-4 md:grid-cols-[minmax(0,1fr)_auto]">
         <div>
           <h3 className="flex items-center gap-2 font-medium"><ShieldCheck size={16} className="text-accent" /> Spend mandate</h3>
           <p className="mt-1 max-w-2xl text-sm text-white/55">Your agents shop, compare and pay only inside these limits. Anything over the approval line waits for you. Each payment gets its own single-use card, and every action is written to a tamper-evident log.</p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <div className="mt-3 grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-3">
             <Num label="Total cap" value={mandate.totalCap} onChange={(v) => setMandate({ ...mandate, totalCap: v })} disabled={running} />
             <Num label="Per-purchase cap" value={mandate.perPurchaseCap} onChange={(v) => setMandate({ ...mandate, perPurchaseCap: v })} disabled={running} />
             <Num label="Ask me above" value={mandate.approvalThreshold} onChange={(v) => setMandate({ ...mandate, approvalThreshold: v })} disabled={running} />
@@ -95,11 +95,11 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
           {pending.length > 0 && (
             <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-4">
               <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-amber-100"><Lock size={14} /> {pending.length} {pending.length > 1 ? "purchases need" : "purchase needs"} your approval</h3>
-              <div className="grid gap-2">
+              <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
                 {pending.map((p) => (
                   <div key={p.id} className="flex flex-wrap items-center gap-3 rounded-lg bg-black/30 p-3 text-sm">
                     <span className="flex-1">{p.purpose} · <span className="text-white/60">{p.vendor}</span></span>
-                    <span className="font-mono">{money(p.amount)}</span>
+                    <span className="shrink-0 whitespace-nowrap font-mono">{money(p.amount)}</span>
                     <button disabled={running} className="btn bg-emerald-500/20 px-3 py-1 text-emerald-100 hover:bg-emerald-500/30" onClick={() => onChange(decide(plan, p.id, true))}><Check size={13} /> Approve</button>
                     <button disabled={running} className="btn bg-white/5 px-3 py-1 text-white/60 hover:bg-white/10" onClick={() => onChange(decide(plan, p.id, false))}><X size={13} /> Reject</button>
                   </div>
@@ -111,19 +111,19 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
           {(a.shortlists?.length ?? 0) > 0 && (
             <section>
               <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-white/70"><Search size={14} /> What the agent compared</h3>
-              <div className="grid gap-3 lg:grid-cols-3">
+              <div className="grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-3">
                 {a.shortlists!.map((sl) => (
                   <div key={sl.category} className="rounded-xl border border-white/10 bg-black/20 p-3">
                     <div className="mb-2 flex items-baseline justify-between">
                       <span className="font-medium">{sl.category}</span>
                       <span className="text-xs text-white/40">target {money(sl.target)}</span>
                     </div>
-                    <div className="grid gap-1.5">
+                    <div className="grid grid-cols-[minmax(0,1fr)] gap-1.5">
                       {sl.quotes.map((q, i) => (
                         <div key={q.vendor} className={`rounded-lg border p-2 text-xs ${i === sl.pick ? "border-accent/50 bg-accent/10" : "border-white/5"}`}>
                           <div className="flex items-center justify-between gap-2">
                             <span className="min-w-0 truncate font-medium text-white/90">{q.vendor}</span>
-                            <span className="font-mono">{money(q.price)}</span>
+                            <span className="shrink-0 whitespace-nowrap font-mono">{money(q.price)}</span>
                           </div>
                           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-white/45">
                             <span className="flex items-center gap-0.5"><Star size={10} className="fill-current" />{q.rating}</span>
@@ -150,15 +150,15 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
             </section>
           )}
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
             <section>
               <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-white/70"><CreditCard size={14} /> Payments</h3>
-              <div className="grid gap-2">
+              <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
                 {a.purchases.map((p) => (
                   <div key={p.id} className={`rounded-lg border border-white/10 bg-black/20 p-3 text-sm ${p.status === "refunded" || p.status === "canceled" ? "opacity-60" : ""}`}>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium">{p.purpose}</span>
-                      <span className={`font-mono ${p.status === "refunded" || p.status === "canceled" ? "line-through" : ""}`}>{money(p.amount)}</span>
+                      <span className="min-w-0 font-medium">{p.purpose}</span>
+                      <span className={`shrink-0 whitespace-nowrap font-mono ${p.status === "refunded" || p.status === "canceled" ? "line-through" : ""}`}>{money(p.amount)}</span>
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
                       <span className={`rounded px-1.5 py-0.5 font-semibold uppercase ${STATUS[p.status]}`}>{p.status.replace("_", " ")}</span>
@@ -168,7 +168,7 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
                     {p.card && (
                       <details className="mt-2 rounded-md bg-white/[0.03] px-2 py-1.5 text-[11px] text-white/55">
                         <summary className="flex cursor-pointer list-none items-center gap-1.5"><Receipt size={11} /> Receipt · {p.card}</summary>
-                        <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 font-mono">
+                        <dl className="mt-1.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 font-mono">
                           <dt className="text-white/35">merchant</dt><dd>{p.vendor}</dd>
                           <dt className="text-white/35">amount</dt><dd>{money(p.amount)}</dd>
                           <dt className="text-white/35">card</dt><dd>{p.card} (single-use, locked to merchant)</dd>
@@ -189,7 +189,7 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
             </section>
             <section>
               <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-white/70"><Mail size={14} /> Outbox</h3>
-              <div className="grid gap-2">
+              <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
                 {a.outbox.map((m) => (
                   <details key={m.id} className="group rounded-lg border border-white/10 bg-black/20 p-3 text-sm">
                     <summary className="flex cursor-pointer list-none items-center gap-2">

@@ -82,6 +82,7 @@ export type EventPlan = {
   tasks: Task[];
   vendors: Vendor[];
   permits?: Permit[];
+  ops?: OpsPlan;
   weather: Weather | null;
   invite: { subject: string; body: string; sms: string };
   risks: Risk[];
@@ -124,6 +125,18 @@ export type OutboxMessage = {
 };
 
 export type AuditEntry = { ts: number; actor: string; action: string; detail: string; prev: string; hash: string };
+
+export type OpsPlan = {
+  staffing: { role: string; count: number; note: string }[];
+  shifts: { label: string; start: string; end: string; volunteers: number }[];
+  policies: { name: string; why: string }[];
+  meals: { slot: string; day: number; time: string; servings: number; split: Record<string, number> }[];
+  infra: { item: string; qty: string; note: string }[];
+  checkin: { lanes: number; minutes: number; note: string };
+  sponsors: { tier: string; price: number; count: number; perks: string }[];
+  sponsorTarget: number;
+  contacts: { role: string; owner: string; when: string }[];
+};
 
 export type Permit = {
   name: string;

@@ -11,7 +11,7 @@ import { AutopilotPanel } from "./AutopilotPanel";
 import { reselectVenue } from "@/lib/replan";
 
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
-const TABS = ["Overview", "Schedule", "Budget", "Venues", "Tasks", "Permits", "Invite", "Autopilot"] as const;
+const TABS = ["Overview", "Schedule", "Budget", "Venues", "Tasks", "Permits", "Ops", "Invite", "Autopilot"] as const;
 type Tab = (typeof TABS)[number];
 const COLORS = ["#a78bfa", "#38bdf8", "#34d399", "#fbbf24", "#fb923c", "#f472b6", "#f87171", "#94a3b8", "#22d3ee", "#c084fc"];
 
@@ -51,7 +51,7 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
             </button>
           </div>
         </div>
-        <div className="mt-4 flex gap-1 overflow-x-auto">
+        <div className="mt-4 flex gap-1 overflow-x-auto [scrollbar-color:rgba(255,255,255,0.15)_transparent] [scrollbar-width:thin]">
           {TABS.map((t) => (
             <button key={t} onClick={() => setTab(t)} className={`rounded-lg px-3 py-1.5 text-sm transition ${tab === t ? "bg-white/10 text-white" : "text-white/50 hover:text-white/80"}`}>
               {t}
@@ -65,7 +65,7 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
 
       <div className="p-5">
         {tab === "Overview" && (
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2">
             <div className="md:col-span-2 rounded-xl border border-white/10 bg-accent/[0.06] p-4 text-[15px] leading-relaxed text-white/85">{plan.summary}</div>
             <Stat icon={<MapPin size={16} />} label="Venue" value={venue?.name ?? "TBD"} sub={venue?.why} />
             <Stat
@@ -76,7 +76,7 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
             />
             <div className="md:col-span-2">
               <h3 className="mb-2 flex items-center gap-2 text-sm font-medium text-white/70"><ShieldAlert size={15} /> Critic review</h3>
-              <div className="grid gap-2">
+              <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
                 {plan.risks.map((r, i) => (
                   <div key={i} className="flex gap-3 rounded-lg border border-white/10 bg-black/20 p-3 text-sm">
                     <span className={`mt-0.5 h-fit rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${r.level === "high" ? "bg-red-500/20 text-red-300" : r.level === "medium" ? "bg-amber-500/20 text-amber-200" : "bg-emerald-500/15 text-emerald-200"}`}>{r.level}</span>
@@ -114,7 +114,7 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
         {tab === "Budget" && <BudgetView plan={plan} />}
 
         {tab === "Venues" && (
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-3">
             {plan.venues.map((v, i) => (
               <button
                 key={v.name}
@@ -139,7 +139,7 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
             {plan.vendors.length > 0 && (
               <div className="md:col-span-3">
                 <h3 className="mb-2 mt-2 text-sm font-medium text-white/70">Vendors</h3>
-                <div className="grid gap-2 md:grid-cols-2">
+                <div className="grid grid-cols-[minmax(0,1fr)] gap-2 md:grid-cols-2">
                   {plan.vendors.map((v, i) => (
                     <div key={i} className="rounded-lg border border-white/10 bg-black/20 p-3 text-sm">
                       <div className="flex justify-between"><span className="font-medium">{v.category}</span><span className="text-white/60">{money(v.estCost)}</span></div>
@@ -154,7 +154,7 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
         )}
 
         {tab === "Tasks" && (
-          <div className="grid gap-2">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
             <div className="mb-1 h-1.5 overflow-hidden rounded-full bg-white/10">
               <div className="h-full bg-accent transition-all" style={{ width: `${(done / Math.max(1, plan.tasks.length)) * 100}%` }} />
             </div>
@@ -176,7 +176,7 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
         )}
 
         {tab === "Permits" && (
-          <div className="grid gap-3">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
             <p className="flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.02] p-3 text-xs text-white/55">
               <FileCheck2 size={14} className="mt-0.5 shrink-0 text-accent" />
               Permits agent checklist for {venue?.name ?? "this venue"} in {b.city}. This is a planning aid, not legal advice: agencies, fees and lead times are typical estimates, so confirm each one with the issuing agency. Autopilot drafts the applications and pays the fees.
@@ -185,7 +185,7 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
             {(plan.permits ?? []).map((p) => {
               const filed = plan.tasks.find((x) => x.id === p.taskId)?.done;
               return (
-                <div key={p.name} className="grid gap-1 rounded-xl border border-white/10 bg-black/20 p-4 sm:grid-cols-[1fr_auto]">
+                <div key={p.name} className="grid grid-cols-[minmax(0,1fr)] gap-1 rounded-xl border border-white/10 bg-black/20 p-4 sm:grid-cols-[minmax(0,1fr)_auto]">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium">{p.name}</span>
@@ -205,10 +205,12 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
           </div>
         )}
 
+        {tab === "Ops" && <OpsTab plan={plan} />}
+
         {tab === "Autopilot" && <AutopilotPanel plan={plan} onChange={onChange} />}
 
         {tab === "Invite" && (
-          <div className="grid gap-4 md:grid-cols-[2fr_1fr]">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
             <div className="rounded-xl border border-white/10 bg-black/20 p-4">
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-xs uppercase tracking-wider text-white/40">Email</span>
@@ -235,27 +237,27 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
 function BudgetView({ plan }: { plan: EventPlan }) {
   const total = plan.budget.reduce((s, l) => s + l.amount, 0) || 1;
   return (
-    <div className="grid gap-5">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5">
       <div className="flex h-4 overflow-hidden rounded-full">
         {plan.budget.map((l, i) => (
           <div key={l.category} title={`${l.category} ${money(l.amount)}`} style={{ width: `${(l.amount / total) * 100}%`, background: COLORS[i % COLORS.length] }} />
         ))}
       </div>
-      <div className="grid gap-2">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
         {plan.budget.map((l, i) => (
           <div key={l.category} className="flex items-center gap-3 text-sm">
             <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: COLORS[i % COLORS.length] }} />
-            <span className="w-44 shrink-0">{l.category}</span>
+            <span className="min-w-0 flex-1 truncate sm:w-44 sm:flex-none sm:shrink-0">{l.category}</span>
             <span className="w-24 shrink-0 text-right font-mono">{money(l.amount)}</span>
             <span className="w-12 shrink-0 text-right text-white/40">{Math.round((l.amount / total) * 100)}%</span>
-            <span className="truncate text-white/50">{l.note}</span>
+            <span className="hidden min-w-0 truncate text-white/50 sm:block">{l.note}</span>
           </div>
         ))}
         <div className="mt-2 flex items-center gap-3 border-t border-white/10 pt-2 text-sm font-medium">
           <span className="w-2.5" />
-          <span className="w-44">Total</span>
+          <span className="min-w-0 flex-1 sm:w-44 sm:flex-none">Total</span>
           <span className="w-24 text-right font-mono">{money(total)}</span>
-          <span className="text-white/40">≈ {money(total / plan.brief.guests)} / guest</span>
+          <span className="hidden text-white/40 sm:inline">≈ {money(total / plan.brief.guests)} / guest</span>
         </div>
       </div>
     </div>
@@ -302,3 +304,145 @@ function download(name: string, content: string, type: string) {
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const fmtDate = (d: string) => new Date(`${d}T12:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
 const addDays = (d: string, n: number) => { const x = new Date(`${d}T12:00`); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
+
+function OpsTab({ plan }: { plan: EventPlan }) {
+  const ops = plan.ops;
+  if (!ops) return <p className="text-sm text-white/50">Re-run the plan to size staffing, food and infrastructure.</p>;
+  const today = new Date().toISOString().slice(0, 10);
+  const doneIds = new Set(plan.tasks.filter((t) => t.done).map((t) => t.id));
+  const live = (plan.autopilot?.purchases ?? []).filter((p) => ["auto_approved", "approved"].includes(p.status));
+  const needDeposit = ["Venue", ...plan.vendors.map((v) => v.category)];
+  const permits = plan.permits ?? [];
+  const blockers = [
+    ...permits.filter((p) => !doneIds.has(p.taskId ?? "")).map((p) => `${p.atRisk ? "Expedite" : "File"}: ${p.name}`),
+    ...needDeposit.filter((c) => !live.some((p) => p.category === c)).map((c) => `No ${c} deposit yet`),
+    ...plan.tasks.filter((t) => !t.done && t.due < today).map((t) => `Overdue: ${t.title}`),
+  ];
+  const pct = (n: number, d: number) => (d ? n / d : 1);
+  const readiness = Math.round(100 * (0.5 * pct(doneIds.size, plan.tasks.length) + 0.25 * pct(permits.filter((p) => doneIds.has(p.taskId ?? "")).length, permits.length) + 0.25 * pct(needDeposit.filter((c) => live.some((p) => p.category === c)).length, needDeposit.length)));
+  const card = "rounded-xl border border-white/10 bg-black/20 p-4";
+  const h = "mb-2 text-xs font-semibold uppercase tracking-wider text-white/45";
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
+      <div className={`${card} grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center`}>
+        <div>
+          <div className={h}>Readiness</div>
+          <div className="font-display text-5xl text-accent">{readiness}<span className="text-xl text-white/40">%</span></div>
+        </div>
+        <div className="min-w-0 text-sm">
+          {blockers.length === 0 ? (
+            <p className="text-emerald-300">Nothing blocking. Run the day-of brief.</p>
+          ) : (
+            <>
+              <p className="mb-1 text-white/60">{blockers.length} thing{blockers.length > 1 ? "s" : ""} still blocking the event:</p>
+              <ul className="grid grid-cols-[minmax(0,1fr)] gap-0.5 text-white/80">
+                {blockers.slice(0, 6).map((x) => <li key={x}>· {x}</li>)}
+                {blockers.length > 6 && <li className="text-white/40">+{blockers.length - 6} more on Tasks and Permits</li>}
+              </ul>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[repeat(2,minmax(0,1fr))]">
+        <section className={card}>
+          <h3 className={h}>Staffing & safety</h3>
+          <table className="w-full text-sm">
+            <tbody>
+              {ops.staffing.map((s) => (
+                <tr key={s.role} className="border-b border-white/5 last:border-0">
+                  <td className="py-1.5 pr-3 font-mono text-accent-soft">{s.count.toLocaleString()}</td>
+                  <td className="py-1.5"><div>{s.role}</div><div className="text-xs text-white/45">{s.note}</div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {ops.shifts.length > 1 && (
+            <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-white/60">
+              {ops.shifts.map((x, i) => <span key={i} className="rounded border border-white/10 px-1.5 py-0.5 font-mono">{x.label} {x.start}–{x.end} · {x.volunteers}</span>)}
+            </div>
+          )}
+        </section>
+
+        <section className={card}>
+          <h3 className={h}>Infrastructure</h3>
+          <table className="w-full text-sm">
+            <tbody>
+              {ops.infra.map((x) => (
+                <tr key={x.item} className="border-b border-white/5 last:border-0">
+                  <td className="py-1.5 pr-3 font-mono whitespace-nowrap text-accent-soft">{x.qty}</td>
+                  <td className="py-1.5"><div>{x.item}</div><div className="text-xs text-white/45">{x.note}</div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-3 text-xs text-white/55">{ops.checkin.lanes > 0 && <><span className="font-mono text-accent-soft">{ops.checkin.lanes}</span> check-in lanes. </>}{ops.checkin.note}</p>
+        </section>
+      </div>
+
+      {ops.meals.length > 0 && (
+        <section className={card}>
+          <h3 className={h}>Food quantities</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[520px] text-sm">
+              <thead className="text-left text-xs text-white/40">
+                <tr>
+                  <th className="pb-1 font-normal">Meal</th>
+                  <th className="pb-1 text-right font-normal">Servings</th>
+                  {Object.keys(ops.meals[0].split).map((k) => <th key={k} className="pb-1 text-right font-normal capitalize">{k}</th>)}
+                </tr>
+              </thead>
+              <tbody className="font-mono">
+                {ops.meals.map((m, i) => (
+                  <tr key={i} className="border-t border-white/5">
+                    <td className="py-1.5 font-sans">{m.slot} <span className="text-xs text-white/40">D{m.day} {m.time}</span></td>
+                    <td className="py-1.5 text-right">{m.servings.toLocaleString()}</td>
+                    {Object.values(m.split).map((n, j) => <td key={j} className="py-1.5 text-right text-white/70">{n.toLocaleString()}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-xs text-white/45">Includes staff and a 5% buffer. Diet shares are typical estimates, boosted for diets named in the brief; replace them with registration data when you have it.</p>
+        </section>
+      )}
+
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[repeat(2,minmax(0,1fr))]">
+        {ops.sponsors.length > 0 && (
+          <section className={card}>
+            <h3 className={h}>Sponsorship</h3>
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-1.5 text-sm">
+              {ops.sponsors.map((t) => (
+                <div key={t.tier} className="flex items-baseline justify-between gap-3 border-b border-white/5 pb-1.5 last:border-0">
+                  <div className="min-w-0"><div>{t.tier} <span className="text-xs text-white/40">× {t.count}</span></div><div className="truncate text-xs text-white/45">{t.perks}</div></div>
+                  <span className="font-mono text-accent-soft">${t.price.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-sm">Target <span className="font-mono">${ops.sponsorTarget.toLocaleString()}</span> covers <span className="font-mono text-accent">{Math.round((ops.sponsorTarget / plan.brief.budget) * 100)}%</span> of the budget; net cost <span className="font-mono">${Math.max(0, plan.brief.budget - ops.sponsorTarget).toLocaleString()}</span>.</p>
+          </section>
+        )}
+        <section className={card}>
+          <h3 className={h}>Policies to publish</h3>
+          <ul className="grid grid-cols-[minmax(0,1fr)] gap-1.5 text-sm">
+            {ops.policies.map((x) => <li key={x.name}><div>{x.name}</div><div className="text-xs text-white/45">{x.why}</div></li>)}
+          </ul>
+        </section>
+      </div>
+
+      <section className={card}>
+        <h3 className={h}>Day-of run sheet: who handles what</h3>
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-1 text-sm">
+          {ops.contacts.map((c) => (
+            <div key={c.role} className="grid grid-cols-[minmax(0,1fr)] gap-x-3 border-b border-white/5 py-1.5 last:border-0 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+              <span>{c.role}</span>
+              <span className="text-white/70">{c.owner}</span>
+              <span className="text-xs text-white/45">{c.when}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+      <p className="text-center text-[11px] text-white/35">Ratios are planning rules of thumb. Confirm requirements with your venue, fire marshal and insurer.</p>
+    </div>
+  );
+}

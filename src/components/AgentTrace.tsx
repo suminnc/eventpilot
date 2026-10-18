@@ -13,14 +13,14 @@ export function AgentRoster({ events, running }: { events: AgentEvent[]; running
     return s;
   }, [events]);
   return (
-    <div className="grid grid-cols-7 gap-1.5">
+    <div className="grid grid-cols-4 gap-1.5">
       {(Object.keys(AGENTS) as AgentId[]).filter((id) => id !== "payments").map((id) => {
         const a = AGENTS[id];
         const st = status[id];
         return (
           <div key={id} title={`${a.name} — ${a.role}`} className="flex flex-col items-center gap-1 text-center">
             <div
-              className={`relative grid h-9 w-9 place-items-center rounded-full border transition ${st === "working" ? "pulse-ring" : ""}`}
+              className={`relative grid grid-cols-[minmax(0,1fr)] h-9 w-9 place-items-center rounded-full border transition ${st === "working" ? "pulse-ring" : ""}`}
               style={{ borderColor: st ? a.color : "rgba(255,255,255,0.1)", color: a.color, background: st ? `${a.color}22` : "transparent", opacity: st || running ? 1 : 0.5 }}
             >
               {st === "done" ? <CheckCircle2 size={16} /> : st === "working" ? <Loader2 size={16} className="animate-spin" /> : <Bot size={16} />}
@@ -68,10 +68,10 @@ export function AgentTrace({ events, running }: { events: AgentEvent[]; running:
           );
         return (
           <div key={i} className={`fade-up flex gap-2 ${e.type === "tool_result" ? "pl-5" : ""}`}>
-            <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md" style={{ background: `${a.color}22`, color: a.color }}>
+            <span className="mt-0.5 grid grid-cols-[minmax(0,1fr)] h-5 w-5 shrink-0 place-items-center rounded-md" style={{ background: `${a.color}22`, color: a.color }}>
               {icon}
             </span>
-            <div className={`leading-snug ${e.type === "thought" ? "italic text-white/60" : "text-white/85"}`}>
+            <div className={`min-w-0 leading-snug [overflow-wrap:anywhere] ${e.type === "thought" ? "italic text-white/60" : "text-white/85"}`}>
               <span className="mr-1 font-medium" style={{ color: a.color }}>
                 {a.name}
               </span>

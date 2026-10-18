@@ -110,11 +110,12 @@ export function venueSearchTool(city: string, eventType: string, vibe: string, g
     .map((v) => {
       const tagScore = v.tags.filter((t) => words.includes(t)).length * 3;
       const fits = v.capacity >= guests ? Math.max(-6, 4 - 2 * Math.log2(v.capacity / Math.max(guests, 1))) : -10;
+      const wantsIndoor = /indoor/.test(words) && !v.indoor ? -12 : 0;
       const price = v.pricePerHour <= maxHourly ? 2 : -3 - 2 * Math.log2(v.pricePerHour / Math.max(maxHourly, 1));
       const cityName = city.split(",")[0].trim().toLowerCase();
       const named = CATALOG.includes(v as (typeof CATALOG)[number]);
       const near = named && cityName && `${v.name} ${v.neighborhood}`.toLowerCase().includes(cityName) ? 3 : 0;
-      return { v, score: tagScore + (tagScore ? 0 : -3) + fits + price + near + (named ? 2 : 0) };
+      return { v, score: wantsIndoor + tagScore + (tagScore ? 0 : -3) + fits + price + near + (named ? 2 : 0) };
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, 3)

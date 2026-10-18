@@ -13,7 +13,7 @@ export function defaultMandate(plan: EventPlan): SpendMandate {
     totalCap: b - contingency,
     perPurchaseCap: Math.round(b * 0.3),
     approvalThreshold: Math.max(250, Math.round(b * 0.02)),
-    allowedCategories: Array.from(new Set(["Venue", ...plan.vendors.map((v) => v.category), ...(plan.permits?.length ? ["Permits"] : [])])),
+    allowedCategories: Array.from(new Set(["Venue", ...plan.vendors.map((v) => v.category), ...(plan.permits?.length ? ["Permits"] : []), ...(plan.ops ? ["Staffing"] : [])])),
   };
 }
 
@@ -63,7 +63,7 @@ export function planSteps(plan: EventPlan, mandate: SpendMandate): AutopilotStep
   const msg = (m: Omit<OutboxMessage, "id" | "status">, actor: string): AutopilotStep => ({
     label: `${actor}: draft ${m.channel} to ${m.to}`,
     apply: (a, p) =>
-      a.outbox.some((x) => x.to === m.to && x.subject === m.subject) ? { a, plan: p } : ({
+      a.outbox.some((x) => x.to === m.to && (x.subject === m.subject || m.to.startsWith("bookings@"))) ? { a, plan: p } : ({
       a: { ...a, outbox: [...a.outbox, { ...m, id: `m${a.outbox.length}`, status: "draft" }], audit: appendAudit(a.audit, actor, "draft_message", `${m.channel} → ${m.to}: ${m.subject}`) },
       plan: p,
     }),
@@ -120,8 +120,7 @@ export function planSteps(plan: EventPlan, mandate: SpendMandate): AutopilotStep
         plan: p,
       }),
     });
-    steps.push(
-      msg(
+    const book = msg(
         {
           channel: "email",
           to: `bookings@${slug(q.vendor)}.com`,
@@ -130,9 +129,33 @@ export function planSteps(plan: EventPlan, mandate: SpendMandate): AutopilotStep
           taskId: findTask(new RegExp(v.category, "i")),
         },
         "logistics",
-      ),
     );
+    steps.push({ ...book, apply: (a, p) => (a.shortlists?.find((x) => x.category === v.category)?.pick === sl.pick ? book.apply(a, p) : { a, plan: p }) });
     steps.push(buy(q.vendor, v.category, `${v.category} deposit (25%)`, q.price * 0.25, new RegExp(`Book AV|${v.category}`, "i"), sl.why));
+  }
+
+  const ops = plan.ops;
+  if (ops) {
+    const hrs = b.durationHours;
+    const guards = ops.staffing.find((x) => /security/i.test(x.role))?.count ?? 0;
+    if (guards) steps.push(buy("Licensed security contractor", "Staffing", "Security deposit (25%)", guards * hrs * 55 * 0.25, /security guards/i, `${guards} guards × ${hrs}h at ~$55/h`));
+    const medic = ops.staffing.find((x) => /emt/i.test(x.role));
+    if (medic) steps.push(buy("Event medical services", "Staffing", "EMT coverage deposit (25%)", medic.count * hrs * 120 * 0.25, /emt|first aid/i, `${medic.count} EMT × ${hrs}h at ~$120/h`));
+    const sponsorTask = plan.tasks.find((t) => /close sponsors/i.test(t.title))?.id;
+    for (const t of ops.sponsors.slice(0, 3)) {
+      steps.push(
+        msg(
+          {
+            channel: "email",
+            to: `${t.tier.toLowerCase()}-prospects (list)`,
+            subject: `${b.title}: ${t.tier} sponsorship ($${t.price.toLocaleString()})`,
+            body: `Hi {first_name},\n\n${b.title} brings ${b.guests.toLocaleString()} builders together on ${b.date} in ${b.city}. Our ${t.tier} package ($${t.price.toLocaleString()}) includes: ${t.perks}.\n\nWe have ${t.count} ${t.tier} slot${t.count > 1 ? "s" : ""}. Could we find 20 minutes this week?\n\nThanks!`,
+            taskId: sponsorTask,
+          },
+          "comms",
+        ),
+      );
+    }
   }
 
   for (const pm of plan.permits ?? []) {

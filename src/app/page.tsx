@@ -36,7 +36,7 @@ export default function Home() {
     <main className="bg-grid min-h-screen">
       <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
         <button onClick={() => window.location.reload()} className="flex items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-accent text-[#1a0d07]"><Wand2 size={16} /></span>
+          <span className="grid grid-cols-[minmax(0,1fr)] h-8 w-8 place-items-center rounded-lg bg-accent text-[#1a0d07]"><Wand2 size={16} /></span>
           <span className="font-display text-2xl">EventPilot</span>
         </button>
         <span className="hidden text-xs text-white/40 sm:block">Built for LA Hacks · AI Hackathon 2026</span>
@@ -82,7 +82,7 @@ export default function Home() {
           {saved.length > 0 && (
             <div className="mt-10 text-left">
               <h2 className="mb-3 flex items-center gap-2 text-sm text-white/50"><History size={14} /> Your events</h2>
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-2">
                 {saved.map((p) => (
                   <div key={p.id} className="card flex items-center justify-between p-3">
                     <button className="text-left" onClick={() => setPlan(p)}>
@@ -99,7 +99,7 @@ export default function Home() {
           )}
         </section>
       ) : (
-        <section className="mx-auto grid max-w-7xl gap-5 px-6 pb-16 lg:grid-cols-[380px_1fr]">
+        <section className="mx-auto grid max-w-7xl gap-5 px-6 pb-16 grid-cols-[minmax(0,1fr)] lg:grid-cols-[380px_minmax(0,1fr)]">
           <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-4 lg:self-start">
             <div className="card p-4">
               <div className="mb-3 flex items-center justify-between">
@@ -140,7 +140,7 @@ export default function Home() {
                 <PlanView plan={plan} onChange={setPlan} />
               </div>
             ) : (
-              <div className="card grid min-h-[420px] place-items-center p-10 text-center text-white/40">
+              <div className="card grid grid-cols-[minmax(0,1fr)] min-h-[420px] place-items-center p-10 text-center text-white/40">
                 <div>
                   <Bot size={28} className="mx-auto mb-3 animate-pulse text-accent" />
                   The crew is assembling your plan…

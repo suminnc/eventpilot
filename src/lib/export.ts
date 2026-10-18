@@ -24,6 +24,7 @@ export function planToMarkdown(p: EventPlan): string {
     ...p.tasks.map((t) => `- [${t.done ? "x" : " "}] ${t.title} — due ${t.due} (${t.owner})`),
     "",
     ...(p.permits?.length ? ["## Permits (estimates; verify with each agency)", ...p.permits.map((x) => `- ${x.name} (${x.agency}): file by ${x.deadline}, ~${x.leadDays}d lead, ${x.fee ? money(x.fee) : "no fee"}${x.atRisk ? " **EXPEDITE**" : ""}`), ""] : []),
+    ...(p.ops ? ["## Ops", ...p.ops.staffing.map((x) => `- ${x.count} × ${x.role} (${x.note})`), ...p.ops.infra.map((x) => `- ${x.item}: ${x.qty} (${x.note})`), ...p.ops.meals.map((m) => `- ${m.slot} D${m.day} ${m.time}: ${m.servings} servings (${Object.entries(m.split).map(([k, n]) => `${k} ${n}`).join(", ")})`), ...(p.ops.sponsors.length ? [`- Sponsor target ${money(p.ops.sponsorTarget)}: ${p.ops.sponsors.map((t) => `${t.count}× ${t.tier} @ ${money(t.price)}`).join(", ")}`] : []), ""] : []),
     "## Risks",
     ...p.risks.map((r) => `- [${r.level}] ${r.issue} → ${r.mitigation}`),
     "",

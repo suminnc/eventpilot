@@ -1,5 +1,6 @@
 import { allocateBudget } from "./budget";
 import { linkPermitTasks, permitChecklist } from "./permits";
+import { opsPlan } from "./ops";
 import type { EventPlan } from "./types";
 
 /** Re-derive everything that depends on the venue when the user picks a different one. */
@@ -7,7 +8,11 @@ export function reselectVenue(plan: EventPlan, idx: number): EventPlan {
   const from = plan.venues[plan.selectedVenue];
   const to = plan.venues[idx];
   if (!to || idx === plan.selectedVenue) return plan;
-  const swap = (s: string) => (from ? s.split(from.name).join(to.name) : s);
+  const swap = (s: string) => {
+    if (!from) return s;
+    const out = s.split(from.name).join(to.name);
+    return from.neighborhood && from.neighborhood !== to.neighborhood ? out.split(from.neighborhood).join(to.neighborhood) : out;
+  };
   const { permits, tasks: permitTasks } = linkPermitTasks(permitChecklist(plan.brief, to, plan.vendors));
   const tasks = [
     ...plan.tasks.filter((t) => t.agent !== "permits").map((t) => ({ ...t, title: swap(t.title) })),
@@ -31,6 +36,7 @@ export function reselectVenue(plan: EventPlan, idx: number): EventPlan {
     schedule: plan.schedule.map((s) => ({ ...s, title: swap(s.title), detail: swap(s.detail) })),
     budget: allocateBudget(plan.brief, to),
     permits,
+    ops: plan.ops ? opsPlan(plan.brief, plan.schedule, to) : plan.ops,
     tasks,
     risks,
     autopilot: undefined,

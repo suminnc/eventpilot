@@ -22,8 +22,8 @@ import { financeText, itemsOf, submitReimbursement, syncFinance } from "./financ
  * It owns the "active" plan (persisted to .data/), which the web app syncs with.
  */
 
-type State = { rev: number; plan: EventPlan | null; thread: TextMessage[]; since: number; seen: string[]; mailSeen?: string[] };
-type Agent = { state: State; timer?: ReturnType<typeof setInterval>; polling: boolean; working: string | null; error?: string; notify?: ReturnType<typeof setTimeout>; mailTimer?: ReturnType<typeof setInterval>; mailPolling?: boolean; mailError?: string; webNotes?: string[]; webTimer?: ReturnType<typeof setTimeout>; sendTimer?: ReturnType<typeof setTimeout>; sending?: Set<string>; sentKeys?: string[]; planning?: { title: string; prompt: string; events: AgentEvent[] } | null };
+type State = { rev: number; plan: EventPlan | null; thread: TextMessage[]; since: number; seen: string[]; mailSeen?: string[]; sentKeys?: string[] };
+type Agent = { state: State; timer?: ReturnType<typeof setInterval>; polling: boolean; working: string | null; error?: string; notify?: ReturnType<typeof setTimeout>; mailTimer?: ReturnType<typeof setInterval>; mailPolling?: boolean; mailError?: string; webNotes?: string[]; webTimer?: ReturnType<typeof setTimeout>; sendTimer?: ReturnType<typeof setTimeout>; sending?: Set<string>; planning?: { title: string; prompt: string; events: AgentEvent[] } | null };
 
 const FILE = path.join(process.cwd(), ".data", "photon-agent.json");
 const g = globalThis as unknown as { __photonAgent?: Agent };
@@ -555,13 +555,18 @@ async function deliverDraft(id: string): Promise<{ ok: boolean; error?: string }
   const key = `${p.id}|${m.id}`;
   a.sending ??= new Set();
   // Never email the same draft twice, even if a stale browser copy marks it unsent again.
-  if (a.sending.has(key) || a.sentKeys?.includes(key)) return { ok: true };
+  if (a.sending.has(key)) return { ok: true };
+  if (a.state.sentKeys?.includes(key)) {
+    setPlan(sendMessage(p, m.id));
+    return { ok: true };
+  }
   let messageId: string | undefined, to: string | undefined;
   if (m.channel === "email" && mailConfig()) {
     a.sending.add(key);
     const r = await sendEmail(m, p.brief.title).finally(() => a.sending!.delete(key));
     if (!r.ok) return { ok: false, error: r.error };
-    a.sentKeys = [...(a.sentKeys ?? []), key].slice(-500);
+    a.state.sentKeys = [...(a.state.sentKeys ?? []), key].slice(-500);
+    save();
     messageId = r.messageId;
     to = r.to;
   }

@@ -34,6 +34,7 @@ export function WorkflowTab({ plan, onChange }: { plan: EventPlan; onChange: (p:
               <div className="flex items-baseline justify-between gap-2"><span className="font-semibold text-foreground">{t.name}</span><span className="shrink-0 font-mono text-xs text-subtle">{t.size} {t.size === "1" ? "person" : "people"}</span></div>
               <div className="text-muted">{t.owns}</div>
               <div className="text-xs text-subtle">Owns: {t.output}</div>
+              {t.subteams?.length ? <div className="text-xs text-subtle">Distributes to {t.subteams.join(" · ")}</div> : null}
             </div>
           ))}
         </div>
@@ -58,6 +59,19 @@ export function WorkflowTab({ plan, onChange }: { plan: EventPlan; onChange: (p:
             </div>
           </label>
         ))}
+      </section>
+
+      <section>
+        <h3 className="section-head">Control loop</h3>
+        <ol className="pt-2 text-sm text-muted">
+          {w.phases.map((p) => (
+            <li key={p.id} className="border-b border-line py-2">
+              <span className="font-medium text-foreground">{p.title}</span>
+              <span className="text-subtle"> · {p.owner}</span>
+              <div className="text-xs leading-[18px]">{p.does}</div>
+            </li>
+          ))}
+        </ol>
       </section>
 
       <section>

@@ -3,7 +3,7 @@ export const PRESETS = [
     label: "Cal Hacks 13.0",
     emoji: "🐻",
     prompt:
-      "Plan Cal Hacks 13.0, UC Berkeley's flagship hackathon, in San Francisco on Oct 24 2026 starting 9am. 36 hours, 2000 hackers, $500k budget. Techy, high-energy, iconic. Needs vegetarian, vegan, halal and gluten-free food, ADA accessible, near public transit, sponsor expo, workshops, and a big closing ceremony.",
+      "Plan Cal Hacks 13.0, UC Berkeley's flagship hackathon, at the Palace of Fine Arts in San Francisco on Oct 23 2026 starting 9am. 36 hours, 2000 hackers, $500k budget. Techy, high-energy, iconic. Needs vegetarian, vegan, halal and gluten-free food, ADA accessible, near public transit, sponsor expo, workshops, and a big closing ceremony.",
   },
   {
     label: "LA Hacks AI Hackathon",

@@ -119,7 +119,7 @@ export function venueSearchTool(city: string, eventType: string, vibe: string, g
       const cityName = city.split(",")[0].trim().toLowerCase();
       const named = CATALOG.includes(v as (typeof CATALOG)[number]);
       const near = named && cityName && `${v.name} ${v.neighborhood}`.toLowerCase().includes(cityName) ? 3 : 0;
-      const requested = asked && asked.includes(v.name.toLowerCase().split(/\s+(?:cruise|at|event|private)\b/)[0]) ? 30 : 0;
+      const requested = asked && namePattern(v.name).test(asked) ? 30 : 0;
       return { v, score: requested + wantsIndoor + tagScore + (tagScore ? 0 : -3) + fits + price + near + (named ? 2 : 0) };
     })
     .sort((a, b) => b.score - a.score)
@@ -129,6 +129,12 @@ export function venueSearchTool(city: string, eventType: string, vibe: string, g
       const { tags, city: _c, ...rest } = v as typeof v & { city?: string };
       return { ...rest, why: "" } as Venue;
     });
+}
+
+/** Matches a venue named in free text by its first two distinctive words, e.g. "Palace of Fine Arts" or "Pier 27". */
+function namePattern(name: string) {
+  const words = name.toLowerCase().split(/\s+/).filter((w) => /^[a-z0-9]+$/.test(w) && !/^(of|at|the|a|and)$/.test(w));
+  return new RegExp(`\\b${words.slice(0, 2).join("\\W+(?:\\w+\\W+){0,2}")}\\b`);
 }
 
 export function regionFor(city: string): "los angeles" | "bay area" | null {

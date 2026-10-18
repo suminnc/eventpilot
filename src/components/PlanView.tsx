@@ -340,7 +340,7 @@ function OpsTab({ plan }: { plan: EventPlan }) {
             <tbody>
               {ops.staffing.map((s) => (
                 <tr key={s.role} className="border-b border-line last:border-0">
-                  <td className="py-1.5 pr-3 font-mono text-accent">{s.count.toLocaleString()}</td>
+                  <td className="w-14 whitespace-nowrap py-1.5 pr-3 align-top font-mono text-accent">{s.count.toLocaleString()}</td>
                   <td className="py-1.5"><div>{s.role}</div><div className="text-xs text-muted">{s.note}</div></td>
                 </tr>
               ))}

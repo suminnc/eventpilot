@@ -134,8 +134,10 @@ export function checkReceipt(f: Finance, r: Omit<Reimbursement, "id" | "check" |
   checks.push(!name ? { label: "Readable", result: "fail", detail: "No receipt attached" } : /statement|screenshot|bank/.test(name) ? { label: "Readable", result: "warn", detail: "Card statement or screenshot, not an itemized receipt" } : /\.(pdf|png|jpe?g|heic)$/.test(name) ? { label: "Readable", result: "pass", detail: "Receipt file attached" } : { label: "Readable", result: "warn", detail: "Unusual file type; check it by hand" });
   if (!ref) checks.push({ label: "Budget item", result: "fail", detail: "Pick the budget item this came out of" });
   else {
-    const left = ref.item.allocated - ref.item.spent;
-    checks.push(r.amount <= left ? { label: "Within budget", result: "pass", detail: `${money(left)} left on ${ref.item.name}` } : { label: "Within budget", result: "warn", detail: `${money(r.amount)} is ${money(r.amount - left)} over what's left on ${ref.item.name}` });
+    const onItem = ref.item.allocated > 0;
+    const left = onItem ? ref.item.allocated - ref.item.spent : categoryTotals(ref.category).left;
+    const where = onItem ? ref.item.name : ref.category.name;
+    checks.push(r.amount <= left ? { label: "Within budget", result: "pass", detail: `${money(left)} left on ${where}` } : { label: "Within budget", result: "warn", detail: `${money(r.amount)} is ${money(r.amount - left)} over what's left on ${where}` });
     checks.push(!ref.item.vendor || ref.item.vendor === "TBD" || related(ref.item.vendor, r.vendor) ? { label: "Vendor matches", result: "pass", detail: `Receipt vendor "${r.vendor}"` } : { label: "Vendor matches", result: "warn", detail: `Budget item vendor is ${ref.item.vendor}, receipt says ${r.vendor}` });
   }
   const days = (Date.parse(today) - Date.parse(r.purchaseDate)) / 86400000;

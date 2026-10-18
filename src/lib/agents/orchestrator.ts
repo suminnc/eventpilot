@@ -113,12 +113,12 @@ async function scout(ctx: Ctx, brief: EventBrief): Promise<Venue[]> {
     const llm = ctx.llm;
     const propose = llm
       ? () =>
-          chatJSON<{ venues: Omit<Venue, "why" | "url">[] }>(
+          chatJSON<{ venues: Omit<Venue, "url">[] }>(
             { ...llm, maxTokens: Math.max(llm.maxTokens, 16000) },
-            `You are the Venue Scout agent. List 6 real, currently operating venues (skip any that have closed) in or near the event's city that could host this event. Use each venue's exact official name (no invented or generic names). If the brief names a venue, include it first. For each give a realistic capacity for this format and a typical rental price per hour in USD (estimate). Return {"venues":[{"name","neighborhood","capacity","pricePerHour","style","indoor"}]}.`,
+            `You are the Venue Scout agent. List 6 real, currently operating venues (skip any that have closed) in or near the event's city that could host this event. Use each venue's exact official name (no invented or generic names). If the brief names a venue, include it first. For each give a realistic capacity for this format, a typical rental price per hour in USD (estimate), and a punchy one-sentence "why" about fit and vibe (no dollar figures). Return {"venues":[{"name","neighborhood","capacity","pricePerHour","style","indoor","why"}]}.`,
             `Brief: ${briefJSON(brief)}${fb(ctx)}\nOriginal request: ${brief.prompt}`,
             { timeoutMs: 100_000 },
-          ).then((r) => (Array.isArray(r.venues) ? r.venues : []).filter((v) => v && typeof v.name === "string").map((v) => ({ ...v, capacity: Math.max(1, Number(v.capacity) || 0), pricePerHour: Math.max(0, Number(v.pricePerHour) || 0), indoor: v.indoor !== false, neighborhood: String(v.neighborhood ?? ""), style: String(v.style ?? "Venue") })))
+          ).then((r) => (Array.isArray(r.venues) ? r.venues : []).filter((v) => v && typeof v.name === "string").map((v) => ({ ...v, capacity: Math.max(1, Number(v.capacity) || 0), pricePerHour: Math.max(0, Number(v.pricePerHour) || 0), indoor: v.indoor !== false, neighborhood: String(v.neighborhood ?? ""), style: String(v.style ?? "Venue"), why: String(v.why ?? "") })))
       : undefined;
     const search = await tool(
       ctx, "venue", "venue_search",
@@ -130,22 +130,11 @@ async function scout(ctx: Ctx, brief: EventBrief): Promise<Venue[]> {
     if (search.aiError) think(ctx, "venue", `My own venue suggestions failed (${search.aiError}); using the live map search only.`);
     if (search.dropped.length) think(ctx, "venue", `Couldn't verify ${search.dropped.length} suggested venue${search.dropped.length === 1 ? "" : "s"} on OpenStreetMap, so I dropped ${search.dropped.length === 1 ? "it" : "them"}.`);
     think(ctx, "venue", "Rental prices are typical estimates; the venue confirms the real quote during outreach.");
-    return withLLM(ctx, "venue",
-      () => found.map((v) => ({ ...v, why: offlineWhy(v, brief, maxHourly) })),
-      async (llm) => {
-        const out = await chatJSON<{ venues: { name: string; why: string }[] }>(
-          llm,
-          `You are the Venue Scout agent. Rank the candidate venues best-first for the brief and write a punchy 1-2 sentence "why" for each referencing capacity, cost, and vibe. If the brief names a specific venue, rank it first. Return {"venues":[{"name","why"}]} using only the given names.`,
-          `Brief: ${briefJSON(brief)}${fb(ctx)}\nCandidates: ${JSON.stringify(found)}`,
-        );
-        const ranked = out.venues
-          .map((o) => { const v = found.find((f) => f.name === o.name); return v && { ...v, why: o.why }; })
-          .filter(Boolean) as Venue[];
-        const list = ranked.length ? ranked : found.map((v) => ({ ...v, why: offlineWhy(v, brief, maxHourly) }));
-        const asked = list.findIndex((v) => namePattern(v.name).test(brief.prompt.toLowerCase()));
-        if (asked > 0) think(ctx, "venue", `The brief names ${list[asked].name}, so it stays the top pick.`);
-        return asked > 0 ? [list[asked], ...list.filter((_, i) => i !== asked)] : list;
-      });
+    const cost = (v: Venue) => money(v.pricePerHour * billableHours(brief.durationHours));
+    const list = found.map((v) => ({ ...v, why: v.why ? `${v.why.replace(/\.?\s*$/, ".")} About ${cost(v)} for the event.` : offlineWhy(v, brief, maxHourly) }));
+    const asked = list.findIndex((v) => namePattern(v.name).test(brief.prompt.toLowerCase()));
+    if (asked > 0) think(ctx, "venue", `The brief names ${list[asked].name}, so it stays the top pick.`);
+    return asked > 0 ? [list[asked], ...list.filter((_, i) => i !== asked)] : list;
   }, (v) => `Top pick: ${v[0]?.name ?? "none"} (+${Math.max(0, v.length - 1)} alternates)`);
 }
 
@@ -409,8 +398,8 @@ export async function runPlanner(req: PlanRequest, emit: Emit): Promise<EventPla
   }
   const venue = venues[selectedVenue];
 
-  const [budget, schedule] = await Promise.all([budgetAgent(ctx, brief, venue), scheduler(ctx, brief, venue)]);
-  const [{ vendors, tasks: baseTasks }, invite] = await Promise.all([logistics(ctx, brief, budget, venue, weather), comms(ctx, brief, venue)]);
+  const budget = await budgetAgent(ctx, brief, venue);
+  const [schedule, { vendors, tasks: baseTasks }, invite] = await Promise.all([scheduler(ctx, brief, venue), logistics(ctx, brief, budget, venue, weather), comms(ctx, brief, venue)]);
   const { permits, tasks: permitTasks } = await permitsAgent(ctx, brief, venue, vendors, baseTasks);
   const ops = await step(ctx, "lead", "Sizing staff, food, Wi-Fi, power and sponsors…", async () => tool(ctx, "lead", "ops_calculator", `${brief.guests} guests · ${brief.durationHours}h · ${schedule.length} schedule blocks`, () => opsPlan(brief, schedule, venue), (o) => `${o.staffing.reduce((s, x) => s + x.count, 0)} staff · ${o.meals.length} meals · ${o.checkin.lanes} check-in lanes${o.sponsors.length ? ` · $${o.sponsorTarget.toLocaleString()} sponsor target` : ""}`), (o) => `Ops sized: ${o.infra.length} infrastructure lines, ${o.policies.length} policies`);
   const aps = ops.infra.find((i) => /access points/i.test(i.item))?.qty;

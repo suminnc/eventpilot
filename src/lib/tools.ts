@@ -81,7 +81,7 @@ const CATALOG: (Omit<Venue, "why"> & { tags: string[]; city: string })[] = [
   { name: "Cafe Gratitude Private Garden", neighborhood: "Venice", capacity: 40, pricePerHour: 200, style: "Garden patio", indoor: false, tags: ["dinner", "birthday", "intimate", "shower", "social"], city: "los angeles" },
   { name: "LA Public Library Mark Taper Auditorium", neighborhood: "Downtown", capacity: 235, pricePerHour: 280, style: "Auditorium", indoor: true, tags: ["talk", "conference", "workshop", "student", "community"], city: "los angeles" },
   { name: "Moscone Center West", neighborhood: "SoMa, San Francisco", capacity: 5000, pricePerHour: 9500, style: "Convention center halls", indoor: true, tags: ["hackathon", "conference", "expo", "large", "corporate", "techy"], city: "bay area" },
-  { name: "Palace of Fine Arts Exhibition Hall", neighborhood: "Marina, San Francisco", capacity: 3500, pricePerHour: 6000, style: "Historic exhibition hall", indoor: true, tags: ["hackathon", "gala", "expo", "conference", "large", "iconic"], city: "bay area" },
+  { name: "Palace of Fine Arts Exhibition Hall", neighborhood: "3601 Lyon St, Marina, San Francisco", url: "https://palaceoffinearts.com/info/", capacity: 5000, pricePerHour: 6000, style: "Historic exhibition hall", indoor: true, tags: ["hackathon", "gala", "expo", "conference", "large", "iconic"], city: "bay area" },
   { name: "Fort Mason Festival Pavilion", neighborhood: "Marina, San Francisco", capacity: 3000, pricePerHour: 4200, style: "Waterfront pier pavilion", indoor: true, tags: ["hackathon", "festival", "expo", "launch", "large", "party"], city: "bay area" },
   { name: "Pier 27 Cruise Terminal", neighborhood: "Embarcadero, San Francisco", capacity: 2500, pricePerHour: 5200, style: "Bayfront terminal hall", indoor: true, tags: ["hackathon", "gala", "launch", "conference", "large"], city: "bay area" },
   { name: "Oakland Marriott City Center Ballrooms", neighborhood: "Downtown Oakland", capacity: 2200, pricePerHour: 3200, style: "Convention ballrooms", indoor: true, tags: ["hackathon", "conference", "corporate", "large"], city: "bay area" },
@@ -91,7 +91,7 @@ const CATALOG: (Omit<Venue, "why"> & { tags: string[]; city: string })[] = [
   { name: "Dolores Park North Lawn", neighborhood: "Mission, San Francisco", capacity: 400, pricePerHour: 80, style: "City park", indoor: false, tags: ["picnic", "birthday", "casual", "social", "family"], city: "bay area" },
 ];
 
-type Cand = Omit<Venue, "why"> & { tags?: string[]; source: "ai" | "map" | "catalog" };
+type Cand = Omit<Venue, "why"> & { why?: string; tags?: string[]; source: "ai" | "map" | "catalog" };
 type Geo = { lat: number; lon: number; name: string };
 const UA = { "User-Agent": "EventPilot/1.0 (https://eventpilot-sigma.vercel.app)" };
 
@@ -193,7 +193,7 @@ export type VenueSearch = { venues: Venue[]; checked: number; dropped: string[];
  */
 export async function venueSearchTool(
   city: string, eventType: string, vibe: string, guests: number, maxHourly: number, prompt = "",
-  propose?: () => Promise<Omit<Venue, "why" | "url">[]>,
+  propose?: () => Promise<Omit<Venue, "url">[]>,
 ): Promise<VenueSearch> {
   const words = `${eventType} ${vibe} ${prompt}`.toLowerCase();
   const geo = await geocode(city);
@@ -203,7 +203,7 @@ export async function venueSearchTool(
   let aiError: string | undefined;
   if (geo) {
     const [ai, ...maps] = await Promise.all([
-      propose ? propose().catch((e: Error) => ((aiError = e.message.slice(0, 120)), [] as Omit<Venue, "why" | "url">[])) : Promise.resolve([] as Omit<Venue, "why" | "url">[]),
+      propose ? propose().catch((e: Error) => ((aiError = e.message.slice(0, 120)), [] as Omit<Venue, "url">[])) : Promise.resolve([] as Omit<Venue, "url">[]),
       ...kindsFor(words, guests).map(([k, l], i) => new Promise<Cand[]>((r) => setTimeout(r, i * 1100)).then(() => mapListing(k, l, city, geo))),
     ]);
     checked = ai.length;
@@ -217,7 +217,9 @@ export async function venueSearchTool(
   }
   const region = regionFor(city);
   const low = prompt.toLowerCase();
-  const picks = CATALOG.filter((v) => v.city === region && (namePattern(v.name).test(low) || (guests >= 500 && v.capacity >= guests)) && !pool.some((p) => sameName(p.name, v.name)));
+  const named = CATALOG.filter((v) => v.city === region && namePattern(v.name).test(low));
+  pool = pool.filter((p) => !named.some((c) => sameName(p.name, c.name) || namePattern(c.name).test(p.name.toLowerCase())));
+  const picks = CATALOG.filter((v) => v.city === region && (named.includes(v) || (guests >= 500 && v.capacity >= guests)) && !pool.some((p) => sameName(p.name, v.name)));
   const located = geo ? await Promise.all(picks.map((c) => verifyPlace(c.name.split(/,| at /)[0], geo))) : [];
   picks.forEach((c, i) => pool.push({ ...c, url: c.url ?? located[i]?.url ?? `https://www.openstreetmap.org/search?query=${encodeURIComponent(`${c.name}, ${c.neighborhood}`)}`, source: "catalog" }));
   const fromCatalog = !pool.some((p) => p.source !== "catalog") && !!region;
@@ -235,7 +237,7 @@ export async function venueSearchTool(
     .filter(({ v }, i, all) => all.slice(0, i).filter((x) => x.v.style === v.style).length < 2)
     .slice(0, 5)
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    .map(({ v: { tags, source, ...rest } }) => ({ ...rest, why: "" }) as Venue);
+    .map(({ v: { tags, source, ...rest } }) => ({ why: "", ...rest }) as Venue);
   return {
     venues: ranked,
     checked,
@@ -249,7 +251,9 @@ export async function venueSearchTool(
 
 /** Matches a venue named in free text by its first two distinctive words, e.g. "Palace of Fine Arts" or "Pier 27". */
 export function namePattern(name: string) {
-  const words = name.toLowerCase().split(/\s+/).filter((w) => /^[a-z0-9]+$/.test(w) && !/^(of|at|the|a|and)$/.test(w));
+  let words = name.toLowerCase().split(/\s+/).filter((w) => /^[a-z0-9]+$/.test(w) && !/^(of|at|the|a|and)$/.test(w));
+  const city = /^(san francisco|los angeles|san jose|santa monica|sf|la|oakland|pasadena|berkeley)\b/.exec(words.join(" "))?.[0];
+  if (city && words.length - city.split(" ").length >= 2) words = words.slice(city.split(" ").length);
   return new RegExp(`\\b${words.slice(0, 2).join("\\W+(?:\\w+\\W+){0,2}")}\\b`);
 }
 

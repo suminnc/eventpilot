@@ -184,7 +184,7 @@ export async function handleInbound(text: string, id: string) {
     return;
   }
 
-  if (/^(this week|week|workflow|todo|to do|whats due|timeline)$/.test(low)) return reply(thisWeekText(p));
+  if (/^(this week|week|workflow|todo|to do|whats due|timeline|whats next|next|next steps|what now|whats left|what should i do)$/.test(low)) return reply(thisWeekText(p));
   if (/^(vendors|vendor emails|vendor status|inbox|emails|threads|replies)$/.test(low)) return reply(threadsText(p));
   if (/^(team|swarm|agents|org|raci|who decides)$/.test(low)) return reply(swarmText(p));
   if (/^(creao|creao review|audit|review)$/.test(low)) {

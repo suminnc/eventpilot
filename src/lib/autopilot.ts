@@ -304,7 +304,7 @@ export function tidyVendors(vendors: Vendor[], hasVenue: boolean): Vendor[] {
   const out: Vendor[] = [];
   for (const v of vendors) {
     const c = v.category.trim();
-    if ((hasVenue && /^venue/i.test(c)) || /contingency|buffer|reserve/i.test(c)) continue;
+    if ((hasVenue && /^venue/i.test(c)) || /contingency|buffer|reserve|permit|insurance/i.test(c)) continue;
     const same = out.find((x) => x.category.toLowerCase() === c.toLowerCase());
     if (same) Object.assign(same, { estCost: same.estCost + v.estCost, suggestion: `${same.suggestion}; ${v.suggestion}` });
     else out.push({ ...v, category: c });
@@ -325,7 +325,7 @@ const daysUntil = (date: string) => Math.ceil((new Date(`${date}T00:00:00`).getT
 
 /** Discovery + decision: gathers 3 quotes for a category and picks one, scored against the brief. */
 export function shortlist(brief: EventBrief, category: string, target: number): Shortlist {
-  const names = merchantsFor(category) ?? ([["Bay Area {c} Co.", []], ["{c} Collective", ["budget"]], ["Premier {c}", []], ["Golden Gate {c}", []], ["{c} Express", []], ["Mission {c} Works", ["budget"]]] as [string, string[]][]).map(([n, t]) => [n.replace("{c}", category), t] as [string, string[]]);
+  const names = merchantsFor(category) ?? ([["Bay Area {c} Co.", []], ["{c} Collective", ["budget"]], ["Premier {c}", []], ["Golden Gate {c}", []], ["{c} Express", []], ["Mission {c} Works", ["budget"]]] as [string, string[]][]).map(([n, t]) => [n.replace("{c}", category.split(/\s*[&/,]\s*/)[0] || category), t] as [string, string[]]);
   const quotes: Quote[] = names.map(([vendor, tags], i) => {
     const sh = SHAPES[(i + fnv(category).charCodeAt(0)) % SHAPES.length];
     return { vendor, tags, price: Math.round((target * sh.mult) / 50) * 50, rating: sh.rating, leadDays: sh.leadDays, cancellable: sh.cancellable };

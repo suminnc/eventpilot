@@ -37,7 +37,7 @@ Every plan calls `step-5-preview` (`reasoning_effort: low`, 8k output cap, one r
 
 ## CREAO: Best One-Person Company
 **One human operating like a funded event-ops team.** EventPilot's Autonomous Ops Team is an org chart of agents that hand work to each other: Exec scopes → Logistics lead assigns category agents (Food, Venue & Services, Program, Merch & Gifts, People Logistics, Sponsorship, Comms) → Finance gate (affordability veto, >5% variance needs Exec, 10% contingency, 50% deposit cap) → Logistics reconciles → Verifier → Exec approves. One organizer replaces the 30+ person team that runs Cal Hacks.
-- **CREAO agent:** ID `6cb5afb7-e632-436d-b330-82772ec7a7ca` on agent.creao.ai. Run share link: *(team: paste a run share link from the agent's page)*.
+- **CREAO agent:** ID `6cb5afb7-e632-436d-b330-82772ec7a7ca` on agent.creao.ai. Run share link: [https://agent.creao.ai/share/63d7a2f6f2e7360d5c8e5e3fb765fe19](https://agent.creao.ai/share/63d7a2f6f2e7360d5c8e5e3fb765fe19) (eventpilot-ops skill: plans Cal Hacks 13.0 through EventPilot, verifies it, builds the master budget sheet).
 - **What it does:** after the native Ops Team books a plan, EventPilot calls the CREAO agent through the API Trigger from the server (`src/lib/creao.ts`, key never in the browser), polls the async run, and texts the verdict to the organizer. Text `CREAO` to run it on demand. Its findings changed the product: it caught $4,800 of unbudgeted permit fees, a double-counted venue cost, contingency below 10% and a Wi-Fi spec with no bandwidth, all now enforced in code.
 - **Demo:** the Team tab shows the org chart, handoffs and CREAO's verdict; the organizer's phone shows the CREAO text.
 

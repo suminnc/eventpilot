@@ -23,7 +23,7 @@ import { financeText, itemsOf, submitReimbursement, syncFinance } from "./financ
  */
 
 type State = { rev: number; plan: EventPlan | null; thread: TextMessage[]; since: number; seen: string[]; mailSeen?: string[] };
-type Agent = { state: State; timer?: ReturnType<typeof setInterval>; polling: boolean; working: string | null; error?: string; notify?: ReturnType<typeof setTimeout>; mailTimer?: ReturnType<typeof setInterval>; mailPolling?: boolean; mailError?: string; webNotes?: string[]; webTimer?: ReturnType<typeof setTimeout>; planning?: { title: string; prompt: string; events: AgentEvent[] } | null };
+type Agent = { state: State; timer?: ReturnType<typeof setInterval>; polling: boolean; working: string | null; error?: string; notify?: ReturnType<typeof setTimeout>; mailTimer?: ReturnType<typeof setInterval>; mailPolling?: boolean; mailError?: string; webNotes?: string[]; webTimer?: ReturnType<typeof setTimeout>; sendTimer?: ReturnType<typeof setTimeout>; planning?: { title: string; prompt: string; events: AgentEvent[] } | null };
 
 const FILE = path.join(process.cwd(), ".data", "photon-agent.json");
 const g = globalThis as unknown as { __photonAgent?: Agent };
@@ -65,6 +65,7 @@ export function pushPlan(plan: EventPlan, baseRev: number): boolean {
     else if (prev) queueWebUpdate(plan.brief.title, webChanges(prev, plan));
   }
   if (runs) setTimeout(() => void autoRun(plan.id), 5000);
+  else if (autonomous() && plan.autopilot?.outbox.some(isAutoDraft)) scheduleWebSend();
   return true;
 }
 
@@ -273,10 +274,11 @@ export async function handleInbound(text: string, id: string) {
     setPlan(ran);
     const saved = negotiatedSavings(ap);
     const drafted = ap.outbox.filter((m) => m.status === "draft" && /^(bookings|events)@/.test(m.to)).length;
-    if (mailConfig()) await reply(
-      `Done. Compared quotes and set a target price for each vendor${saved > 0 ? ` (${money(saved)} under list)` : ""}. ${drafted} vendor emails are drafted; vendor deposits wait until each vendor confirms a price by email. Text SEND to email them and I'll negotiate the replies.${pending.length ? ` ${pending.length} other payment${pending.length === 1 ? "" : "s"} need${pending.length === 1 ? "s" : ""} your OK, details next.` : ""}`,
-    );
-    else await reply(
+    if (mailConfig()) {
+      a.working = "Emailing vendors";
+      const { sent, failed } = await sendAutoDrafts().finally(() => (a.working = null));
+      await reply(`Done. Compared quotes and set a target price for each vendor${saved > 0 ? ` (${money(saved)} under list)` : ""}. Emailed ${sent} of ${drafted} vendors and permit offices${failed.length ? ` (${failed.length} failed: ${failed[0]})` : ""}; I check replies every 5 seconds, negotiate, and text you before any deposit.${pending.length ? ` ${pending.length} decision${pending.length === 1 ? "" : "s"} coming next.` : ""}`);
+    } else await reply(
       `Done. ${saved > 0 ? `Negotiated ${money(saved)} off vendor quotes. ` : ""}Paid ${auto.length} deposit${auto.length === 1 ? "" : "s"} (${money(auto.reduce((s, x) => s + x.amount, 0))}) on single-use cards; ${money(committed(ap.purchases))} committed of ${money(ap.mandate.totalCap)}.${pending.length ? ` ${pending.length} need${pending.length === 1 ? "s" : ""} your OK, details next.` : " Nothing needs you."}`,
     );
     await notifyDecisions();
@@ -571,6 +573,36 @@ export async function sendOutbox(planId: string, id: string): Promise<{ ok: bool
   return r.ok ? { ok: true, plan: agent().state.plan!, rev: agent().state.rev } : { ok: false, error: r.error };
 }
 
+/** Emails every vendor quote request and permit filing still waiting in the outbox. */
+async function sendAutoDrafts(): Promise<{ sent: number; failed: string[] }> {
+  const ids = agent().state.plan?.autopilot?.outbox.filter(isAutoDraft).map((m) => m.id) ?? [];
+  let sent = 0;
+  const failed: string[] = [];
+  for (const id of ids) {
+    const r = await deliverDraft(id);
+    if (r.ok) sent++;
+    else failed.push(r.error ?? "failed");
+  }
+  return { sent, failed };
+}
+
+/** Autopilot run on the website: send its vendor emails right away instead of leaving them as drafts. */
+function scheduleWebSend() {
+  const a = agent();
+  clearTimeout(a.sendTimer);
+  a.sendTimer = setTimeout(async () => {
+    if (a.working) return void scheduleWebSend();
+    a.working = "Emailing vendors";
+    try {
+      const { sent, failed } = await sendAutoDrafts();
+      if (sent || failed.length) await say(`Autopilot on the website: emailed ${sent} vendors and permit offices${failed.length ? ` (${failed.length} failed: ${failed[0]})` : ""}. I'll negotiate their replies and text you each decision.`, `ws-${Date.now()}`);
+    } finally {
+      a.working = null;
+    }
+    await notifyDecisions();
+  }, 3000);
+}
+
 // ---- Autonomous mode: the Ops Team runs a new plan end to end; only money approvals go to the organizer ----
 
 const autonomous = () => process.env.AUTONOMOUS !== "0" && !!mailConfig();
@@ -583,14 +615,7 @@ async function autoRun(planId: string) {
   try {
     const ran = runAutopilot(p);
     setPlan({ ...ran, autopilot: { ...ran.autopilot!, audit: appendAudit(ran.autopilot!.audit, "exec", "autonomous_run", `${SWARM_NAME} v${SWARM_VERSION} took over ${p.brief.title}`) } });
-    const ids = agent().state.plan!.autopilot!.outbox.filter(isAutoDraft).map((m) => m.id);
-    let sent = 0;
-    const failed: string[] = [];
-    for (const id of ids) {
-      const r = await deliverDraft(id);
-      if (r.ok) sent++;
-      else failed.push(r.error ?? "failed");
-    }
+    const { sent, failed } = await sendAutoDrafts();
     const cur = agent().state.plan!;
     await say(
       `${SWARM_NAME} v${SWARM_VERSION} is running ${cur.brief.title} on its own: ${sent} vendor and permit emails sent${failed.length ? ` (${failed.length} failed: ${failed[0]})` : ""}. It negotiates replies, follows up and switches vendors by itself, and texts you only for money approvals. ${buildSwarm(cur).approval} Text TEAM, VENDORS or STATUS anytime.`,

@@ -63,6 +63,21 @@ body {
 }
 .fade-up { animation: fade-up 0.35s ease-out both; }
 
+/* Page transitions: a view fades in when it mounts (.page-in) and fades out
+   before navigation (.page-fade + opacity-0, driven by useFadeNav).
+   "backwards" fill only holds the start frame, so opacity-0 can still take over afterwards. */
+@keyframes page-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.page-in { animation: page-in 0.3s ease-out backwards; }
+.page-fade { transition: opacity 0.18s ease-in; }
+
+@media (prefers-reduced-motion: reduce) {
+  .page-in, .fade-up { animation: none; }
+  .page-fade { transition: none; }
+}
+
 .scrollbar-thin::-webkit-scrollbar { width: 6px; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(20, 22, 26, 0.14); border-radius: 3px; }
 

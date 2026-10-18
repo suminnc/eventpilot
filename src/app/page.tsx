@@ -5,6 +5,7 @@ import { ArrowRight, Bot, History, RotateCcw, Send, Trash2 } from "lucide-react"
 import { AgentRoster, AgentTrace } from "@/components/AgentTrace";
 import { PlanView } from "@/components/PlanView";
 import { PRESETS } from "@/components/presets";
+import { useFadeNav } from "@/components/useFadeNav";
 import { usePlanner } from "@/lib/usePlanner";
 import { PhotonContext, usePhotonSync } from "@/lib/usePhotonSync";
 import { deletePlan, loadPlans, savePlan } from "@/lib/storage";
@@ -35,7 +36,10 @@ export default function Home() {
     }
   }, [plan]);
 
-  const submit = (p = prompt) => p.trim() && run({ prompt: p });
+  const { go, fadeClass } = useFadeNav({ scrollTop: true });
+  const restart = () => go(() => window.location.reload());
+
+  const submit = (p = prompt) => { if (p.trim()) go(() => { run({ prompt: p }); }); };
   const refine = (f = feedback) => {
     if (!plan || !f.trim()) return;
     run({ prompt: plan.brief.prompt, feedback: f, previous: plan });
@@ -47,7 +51,7 @@ export default function Home() {
     <main className="min-h-screen bg-background">
       <header className="border-b border-line">
         <div className="mx-auto flex max-w-[1200px] items-center justify-between px-6 py-[18px]">
-          <button onClick={() => window.location.reload()} className="font-display text-2xl leading-[30px] text-foreground">
+          <button onClick={restart} className="font-display text-2xl leading-[30px] text-foreground">
             EventPilot
           </button>
           <span className="hidden text-[13px] text-subtle sm:block">Built for LA Hacks · AI Hackathon 2026</span>
@@ -55,7 +59,7 @@ export default function Home() {
       </header>
 
       {!started ? (
-        <>
+        <div key="home" className={`page-in page-fade ${fadeClass}`}>
           <section className="relative isolate overflow-hidden bg-accent px-6 pb-[72px] pt-[88px]">
             <Image src="/images/hero-pier.jpg" alt="" fill priority sizes="100vw" className="-z-20 object-cover" />
             <div className="absolute inset-0 -z-10 bg-accent/85" />
@@ -123,7 +127,7 @@ export default function Home() {
               <div>
                 {saved.map((p) => (
                   <div key={p.id} className="flex items-center justify-between gap-4 border-b border-line py-4">
-                    <button className="text-left" onClick={() => setPlan(p)}>
+                    <button className="text-left" onClick={() => go(() => setPlan(p))}>
                       <div className="text-[15px] font-medium leading-[22px] text-foreground hover:text-accent">{p.brief.title}</div>
                       <div className="text-[13px] text-muted">{p.brief.date} · {p.brief.guests.toLocaleString()} guests · {p.brief.city}</div>
                     </button>
@@ -135,14 +139,14 @@ export default function Home() {
               </div>
             </section>
           )}
-        </>
+        </div>
       ) : (
-        <section className="mx-auto grid max-w-[1200px] grid-cols-[minmax(0,1fr)] gap-12 px-6 pb-20 pt-10 lg:grid-cols-[320px_minmax(0,1fr)]">
+        <section key="planner" className={`page-in page-fade ${fadeClass} mx-auto grid max-w-[1200px] grid-cols-[minmax(0,1fr)] gap-12 px-6 pb-20 pt-10 lg:grid-cols-[320px_minmax(0,1fr)]`}>
           <aside className="flex min-w-0 flex-col gap-8 lg:sticky lg:top-6 lg:self-start">
             <div>
               <div className="section-head justify-between">
                 <h2>Agent crew</h2>
-                <button className="flex items-center gap-1 text-[13px] font-medium normal-case tracking-normal text-accent hover:underline" onClick={() => window.location.reload()}>
+                <button className="flex items-center gap-1 text-[13px] font-medium normal-case tracking-normal text-accent hover:underline" onClick={restart}>
                   <RotateCcw size={12} /> New event
                 </button>
               </div>
@@ -176,11 +180,11 @@ export default function Home() {
           <div className="min-w-0">
             {error && <div className="mb-4 rounded-xl border border-danger/30 bg-danger-soft p-3 text-sm text-danger">{error}</div>}
             {plan ? (
-              <div className={running ? "pointer-events-none opacity-50 transition" : "transition"}>
+              <div key="plan" className={`page-in ${running ? "pointer-events-none opacity-50 transition" : "transition"}`}>
                 <PlanView plan={plan} onChange={setPlan} />
               </div>
             ) : (
-              <div className="grid min-h-[420px] place-items-center rounded-2xl border border-line p-10 text-center text-muted">
+              <div key="assembling" className="page-in grid min-h-[420px] place-items-center rounded-2xl border border-line p-10 text-center text-muted">
                 <div>
                   <Bot size={28} className="mx-auto mb-3 animate-pulse text-accent" />
                   The crew is assembling your plan…

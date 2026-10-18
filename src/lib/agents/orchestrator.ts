@@ -114,8 +114,8 @@ async function scout(ctx: Ctx, brief: EventBrief): Promise<Venue[]> {
     const propose = llm
       ? () =>
           chatJSON<{ venues: Omit<Venue, "why" | "url">[] }>(
-            llm,
-            `You are the Venue Scout agent. List 8 real, currently operating venues in or near the event's city that could host this event. Use each venue's exact official name (no invented or generic names). If the brief names a venue, include it first. For each give a realistic capacity for this format and a typical rental price per hour in USD (estimate). Return {"venues":[{"name","neighborhood","capacity","pricePerHour","style","indoor"}]}.`,
+            { ...llm, maxTokens: Math.max(llm.maxTokens, 16000) },
+            `You are the Venue Scout agent. List 6 real, currently operating venues (skip any that have closed) in or near the event's city that could host this event. Use each venue's exact official name (no invented or generic names). If the brief names a venue, include it first. For each give a realistic capacity for this format and a typical rental price per hour in USD (estimate). Return {"venues":[{"name","neighborhood","capacity","pricePerHour","style","indoor"}]}.`,
             `Brief: ${briefJSON(brief)}${fb(ctx)}\nOriginal request: ${brief.prompt}`,
             { timeoutMs: 100_000 },
           ).then((r) => (Array.isArray(r.venues) ? r.venues : []).filter((v) => v && typeof v.name === "string").map((v) => ({ ...v, capacity: Math.max(1, Number(v.capacity) || 0), pricePerHour: Math.max(0, Number(v.pricePerHour) || 0), indoor: v.indoor !== false, neighborhood: String(v.neighborhood ?? ""), style: String(v.style ?? "Venue") })))

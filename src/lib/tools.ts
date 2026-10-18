@@ -142,7 +142,12 @@ async function verifyPlace(name: string, geo: Geo) {
   const j = await fetchJSON<{ features: PhotonHit[] }>(
     `https://photon.komoot.io/api/?q=${encodeURIComponent(name)}&lat=${geo.lat}&lon=${geo.lon}&limit=8`, UA,
   ).catch(() => null);
-  const hit = j?.features.find((f) => f.properties.name && sameName(name, f.properties.name) && km(geo, { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] }) < 60);
+  const town = geo.name.split(",")[0].toLowerCase();
+  const claimsTown = new RegExp(`\\b(${town}|downtown|dtla)\\b`, "i").test(name);
+  const hit = (j?.features ?? [])
+    .map((f) => ({ f, d: km(geo, { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0] }) }))
+    .filter(({ f, d }) => f.properties.name && sameName(name, f.properties.name) && d < 40 && !(claimsTown && f.properties.city && f.properties.city.toLowerCase() !== town))
+    .sort((a, b) => a.d - b.d)[0]?.f;
   return hit ? { address: addr(hit.properties), url: osmUrl(hit.properties.osm_type, hit.properties.osm_id) } : null;
 }
 
@@ -154,7 +159,7 @@ async function mapListing(kind: string, label: string, city: string, geo: Geo): 
   ).catch(() => [] as NomHit[]);
   const k = KIND[kind];
   return j
-    .filter((h) => h.name && km(geo, { lat: +h.lat, lon: +h.lon }) < 30)
+    .filter((h) => h.name && km(geo, { lat: +h.lat, lon: +h.lon }) < 30 && !/senior|church|school|clinic|hospital|apartment|housing|shelter|library|recovery/i.test(h.name))
     .map((h) => ({
       name: h.name,
       neighborhood: [h.address?.house_number && h.address?.road ? `${h.address.house_number} ${h.address.road}` : h.address?.road, h.address?.neighbourhood ?? h.address?.suburb ?? h.address?.city].filter(Boolean).join(", "),
@@ -211,8 +216,12 @@ export async function venueSearchTool(
     for (const m of maps.flat()) if (!pool.some((p) => sameName(p.name, m.name) || (/^\d/.test(key(m)) && key(p) === key(m)))) pool.push(m);
   }
   const region = regionFor(city);
-  const fromCatalog = !pool.length && !!region;
-  if (fromCatalog) pool = CATALOG.filter((v) => v.city === region).map((v) => ({ ...v, source: "catalog" as const }));
+  const low = prompt.toLowerCase();
+  const picks = CATALOG.filter((v) => v.city === region && (namePattern(v.name).test(low) || (guests >= 500 && v.capacity >= guests)) && !pool.some((p) => sameName(p.name, v.name)));
+  const located = geo ? await Promise.all(picks.map((c) => verifyPlace(c.name.split(/,| at /)[0], geo))) : [];
+  picks.forEach((c, i) => pool.push({ ...c, url: c.url ?? located[i]?.url ?? `https://www.openstreetmap.org/search?query=${encodeURIComponent(`${c.name}, ${c.neighborhood}`)}`, source: "catalog" }));
+  const fromCatalog = !pool.some((p) => p.source !== "catalog") && !!region;
+  if (fromCatalog && !pool.length) pool = CATALOG.filter((v) => v.city === region).map((v) => ({ ...v, source: "catalog" as const }));
   const ranked = pool
     .map((v) => {
       const fits = v.capacity >= guests ? Math.max(-6, 4 - 2 * Math.log2(v.capacity / Math.max(guests, 1))) : -10;

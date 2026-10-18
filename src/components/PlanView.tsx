@@ -165,6 +165,17 @@ export function PlanView({ plan, onChange }: { plan: EventPlan; onChange: (p: Ev
                 </div>
                 <div className="font-medium text-foreground">{v.name}</div>
                 <div className="text-sm text-muted">{v.neighborhood} · {v.style}</div>
+                {v.url && (
+                  <span
+                    role="link"
+                    tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); window.open(v.url, "_blank", "noopener"); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); window.open(v.url, "_blank", "noopener"); } }}
+                    className="text-xs text-accent underline-offset-2 hover:underline"
+                  >
+                    {/openstreetmap\.org/.test(v.url) ? "View on map ↗" : "Venue website ↗"}
+                  </span>
+                )}
                 <div className="mt-2 flex gap-3 font-mono text-xs text-foreground">
                   <span>{v.capacity.toLocaleString()} cap</span>
                   <span>{money(v.pricePerHour)}/hr</span>

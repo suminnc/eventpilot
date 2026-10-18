@@ -309,7 +309,7 @@ async function critic(ctx: Ctx, plan: Omit<EventPlan, "risks" | "score" | "summa
       else if (!venue.indoor) risks.push({ level: "low", issue: "Outdoor venue — weather dependent", mitigation: "Keep a canopy rental on free-cancellation hold." });
     }
     const perGuest = brief.budget / brief.guests;
-    if (perGuest < 20) risks.push({ level: "medium", issue: `Only ${money(perGuest)} per guest`, mitigation: "Seek sponsors, go potluck/food-truck, or trim headcount." });
+    if (perGuest < 20) risks.push({ level: perGuest < 5 ? "high" : "medium", issue: `Only ${money(perGuest)} per guest`, mitigation: "Seek sponsors, go potluck/food-truck, or trim headcount." });
     const days = Math.round((new Date(brief.date).getTime() - Date.now()) / 86_400_000);
     if (days < 14) risks.push({ level: "high", issue: `Only ${Math.max(0, days)} days of lead time`, mitigation: "Book venue + catering today; send invites within 24h." });
     if (brief.guests > 100) risks.push({ level: "low", issue: "Large headcount — check-in bottleneck", mitigation: "Use QR check-in and two lines staffed by volunteers." });

@@ -38,9 +38,9 @@ export function parseBriefOffline(prompt: string, base: Partial<EventBrief> = {}
   const guestsM =
     pn.match(/(\d{1,5})\s*(?:\+\s*)?-?\s*(?:persons?|people|guests?|attendees?|hackers?|folks|ppl|friends|students?|pax|kids|adults|of us)/) ||
     pn.match(/\b(?:for|party of|table for)\s+(\d{1,5})\b(?!\s*(?:h\b|hours?|hrs?|days?|min|%|am|pm|k\b|:\d))/);
-  const budgetM = p.match(/\$\s?(\d[\d,]*(?:\.\d+)?)\s*(k\b)?/) || p.match(/(\d[\d,]*)\s*(k\b)?\s*(?:dollars|usd|budget)/);
+  const budgetM = p.match(/\$\s?(\d[\d,]*(?:\.\d+)?)\s*(k|m|mm|million|thousand)?\b/) || p.match(/(\d[\d,]*(?:\.\d+)?)\s*(k|m|mm|million|thousand)?\s*(?:dollars|usd|budget)/) || p.match(/budget(?:\s+(?:of|is|around|about|under))?\s*:?\s*(\d[\d,]*(?:\.\d+)?)\s*(k|m|mm|million|thousand)?\b/);
   let budget = base.budget || 0;
-  if (!budget && budgetM) budget = parseFloat(budgetM[1].replace(/,/g, "")) * (budgetM[2] ? 1000 : 1);
+  if (!budget && budgetM) budget = parseFloat(budgetM[1].replace(/,/g, "")) * (/^(m|mm|million)$/.test(budgetM[2] ?? "") ? 1e6 : budgetM[2] ? 1000 : 1);
 
   const cityM = prompt.match(/\bin\s+([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)*(?:,\s?[A-Z]{2})?)/) || prompt.match(/\b(?:at|near)\s+([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)*(?:,\s?[A-Z]{2})?)/);
   const city =
@@ -95,7 +95,7 @@ export function parseBriefOffline(prompt: string, base: Partial<EventBrief> = {}
   };
   const [dt, dh, dg, db] = defaults[eventType] || ["18:00", 4, 50, 3000];
   const hoursM = p.match(/(\d{1,2})\s*(?:-|\s)?(?:hour|hr|h\b)/);
-  const guests = base.guests || (guestsM ? +guestsM[1] : dg);
+  const guests = base.guests || (guestsM && +guestsM[1] > 0 ? +guestsM[1] : dg);
 
   const vibeWords = ["casual", "formal", "cozy", "chill", "elegant", "rooftop", "outdoor", "indoor", "techy", "fun", "intimate", "upscale", "sustainable", "beach", "retro", "minimal"];
   const vibe = base.vibe || vibeWords.filter((w) => p.includes(w)).join(", ") || "welcoming, well-run";
@@ -111,7 +111,7 @@ export function parseBriefOffline(prompt: string, base: Partial<EventBrief> = {}
   if (/kid|family|children/.test(p)) constraints.push("kid-friendly");
 
   if (!base.city && !cityM && !/cal ?hacks|berkeley|\bsf\b/i.test(prompt)) assumed.push(`${city} as the city`);
-  if (!base.guests && !guestsM) assumed.push(`${guests} guests`);
+  if (!base.guests && !(guestsM && +guestsM[1] > 0)) assumed.push(`${guests} guests`);
   if (!base.budget && !budgetM) assumed.push("the budget");
   return {
     assumptions: assumed,

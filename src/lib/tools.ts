@@ -95,9 +95,12 @@ const GENERIC: (Omit<Venue, "why" | "neighborhood"> & { tags: string[] })[] = [
   { name: "Downtown Event Loft", capacity: 250, pricePerHour: 450, style: "Industrial loft", indoor: true, tags: ["launch", "meetup", "hackathon", "party", "corporate"] },
   { name: "University Conference Center", capacity: 600, pricePerHour: 500, style: "Conference hall", indoor: true, tags: ["hackathon", "conference", "student", "workshop"] },
   { name: "Botanical Garden Pavilion", capacity: 180, pricePerHour: 520, style: "Garden pavilion", indoor: false, tags: ["wedding", "gala", "dinner", "formal"] },
+  { name: "Public park picnic area", capacity: 200, pricePerHour: 0, style: "Open lawn, first come or reserved via park permit", indoor: false, tags: ["picnic", "family", "casual", "outdoor", "park"] },
   { name: "Community Park Pavilion", capacity: 150, pricePerHour: 50, style: "Covered park pavilion", indoor: false, tags: ["picnic", "birthday", "family", "casual"] },
   { name: "Boutique Hotel Rooftop", capacity: 120, pricePerHour: 650, style: "Rooftop terrace", indoor: false, tags: ["party", "networking", "social", "launch"] },
   { name: "Restaurant table reservation", capacity: 16, pricePerHour: 0, style: "Restaurant, no room fee", indoor: true, tags: ["dinner", "intimate", "birthday", "team", "casual"] },
+  { name: "Convention Center Hall", capacity: 8000, pricePerHour: 2500, style: "Exhibit hall, rented by the day", indoor: true, tags: ["conference", "hackathon", "expo", "large", "convention", "festival"] },
+  { name: "Fairgrounds / Stadium Lot", capacity: 60000, pricePerHour: 4000, style: "Open grounds with staging and power", indoor: false, tags: ["festival", "concert", "fair", "large", "music"] },
   { name: "Private Dining Room", capacity: 40, pricePerHour: 220, style: "Restaurant private room", indoor: true, tags: ["dinner", "intimate", "birthday", "team"] },
 ];
 
@@ -108,7 +111,7 @@ export function venueSearchTool(city: string, eventType: string, vibe: string, g
   const pool = region ? [...CATALOG.filter((v) => v.city === region), ...local] : local;
   return pool
     .map((v) => {
-      const tagScore = v.tags.filter((t) => words.includes(t)).length * 3;
+      const tagScore = v.tags.filter((t) => words.includes(t)).length * 3 + (v.tags.includes(eventType.toLowerCase()) ? 4 : 0);
       const fits = v.capacity >= guests ? Math.max(-6, 4 - 2 * Math.log2(v.capacity / Math.max(guests, 1))) : -10;
       const wantsIndoor = /indoor/.test(words) && !v.indoor ? -12 : 0;
       const price = v.pricePerHour <= maxHourly ? 2 : -3 - 2 * Math.log2(v.pricePerHour / Math.max(maxHourly, 1));

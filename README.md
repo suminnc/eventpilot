@@ -65,3 +65,14 @@ Target tracks: Creao, Visa, Workday, Paper, Cognition/Devin, and Photon (messagi
 
 ## Stack
 Next.js 15 (App Router) · React 19 · Tailwind v4 · TypeScript · lucide-react. Venue rates are planning estimates, not quotes.
+
+### Real vendor email
+
+Set `SMTP_USER`, `SMTP_PASS` (a Gmail App Password) and `EMAIL_REDIRECT_TO` and EventPilot emails vendors for real. While testing, `EMAIL_REDIRECT_TO` sends every message to one inbox instead of the vendor. Once an email goes out, the agent:
+
+- reads replies over IMAP (only from the vendor inbox), matched to each vendor by thread;
+- uses the model to read the price, deposit terms, questions, accept/decline (with a rules-only fallback), while prices, caps and approvals stay fixed in code;
+- counters with competing quotes (up to 3 rounds, never above a 10% ceiling over target, deposits capped at 50%), answers questions from the plan, and follows up when a vendor goes quiet;
+- books inside the spend mandate, or texts you for YES before the deposit, then emails the vendor a confirmation (or a polite release if you say NO).
+
+Text **VENDORS** to see every conversation. Payments remain simulated.

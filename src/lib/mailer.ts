@@ -32,13 +32,15 @@ async function transport(c: NonNullable<ReturnType<typeof mailConfig>>): Promise
   return t;
 }
 
-export async function sendEmail(m: Pick<OutboxMessage, "to" | "subject" | "body">, eventTitle: string): Promise<MailResult> {
+export type ReplyOpts = { reply?: boolean; inReplyTo?: string; references?: string[] };
+
+export async function sendEmail(m: Pick<OutboxMessage, "to" | "subject" | "body">, eventTitle: string, opts: ReplyOpts = {}): Promise<MailResult> {
   const c = mailConfig();
   if (!c) return { ok: false, error: "email not configured" };
   const t = await transport(c);
   for (let attempt = 0; ; attempt++) {
     try {
-      return await deliver(t, c, m, eventTitle);
+      return await deliver(t, c, m, eventTitle, opts);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "send failed";
       if (attempt < 2 && /\b4\d\d\b|ETIMEDOUT|ECONNRESET/.test(msg)) { await new Promise((r) => setTimeout(r, 1500 * (attempt + 1))); continue; }
@@ -47,13 +49,15 @@ export async function sendEmail(m: Pick<OutboxMessage, "to" | "subject" | "body"
   }
 }
 
-async function deliver(t: Transport, c: NonNullable<ReturnType<typeof mailConfig>>, m: Pick<OutboxMessage, "to" | "subject" | "body">, eventTitle: string): Promise<MailResult> {
+async function deliver(t: Transport, c: NonNullable<ReturnType<typeof mailConfig>>, m: Pick<OutboxMessage, "to" | "subject" | "body">, eventTitle: string, opts: ReplyOpts): Promise<MailResult> {
   {
     const info = await t.sendMail({
       from: c.from,
       to: c.redirect,
-      subject: `[EventPilot demo → ${m.to}] ${m.subject}`,
-      text: `EventPilot demo: this message was written for ${m.to} (${eventTitle}) and redirected to this test inbox. No vendor received it.\n\n----\n\n${m.body}`,
+      subject: `${opts.reply ? "Re: " : ""}[EventPilot demo → ${m.to}] ${m.subject}`,
+      text: opts.reply ? `(EventPilot test inbox · written for ${m.to})\n\n${m.body}` : `EventPilot demo: this message was written for ${m.to} (${eventTitle}) and redirected to this test inbox. No vendor received it.\n\n----\n\n${m.body}`,
+      inReplyTo: opts.inReplyTo,
+      references: opts.references,
       headers: { "X-EventPilot-Intended-To": m.to },
     });
     return { ok: true, to: c.redirect, messageId: info.messageId };

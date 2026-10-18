@@ -36,7 +36,7 @@ export function verifyAudit(log: AuditEntry[]): boolean {
   return log.every((e, i) => e.prev === (i ? log[i - 1].hash : "00000000") && e.hash === fnv(`${e.prev}|${e.ts}|${e.actor}|${e.action}|${e.detail}`));
 }
 
-const virtualCard = () => `Visa •••• ${String(Math.floor(1000 + Math.random() * 9000))}`;
+export const virtualCard = () => `Visa •••• ${String(Math.floor(1000 + Math.random() * 9000))}`;
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 
 export function committed(purchases: Purchase[]) {
@@ -54,7 +54,8 @@ export function evaluate(m: SpendMandate, p: Omit<Purchase, "status" | "reason" 
 export type AutopilotStep = { label: string; apply: (a: Autopilot, plan: EventPlan) => { a: Autopilot; plan: EventPlan } };
 
 /** Builds the ordered list of actions the Autopilot will take; the UI plays them back one by one. */
-export function planSteps(plan: EventPlan, mandate: SpendMandate): AutopilotStep[] {
+/** awaitVendors: real email mode, so vendor deposits wait until the vendor confirms a price by email. */
+export function planSteps(plan: EventPlan, mandate: SpendMandate, opts: { awaitVendors?: boolean } = {}): AutopilotStep[] {
   const b = plan.brief;
   const venue = plan.venues[plan.selectedVenue];
   const findTask = (re: RegExp) => plan.tasks.find((t) => re.test(t.title))?.id;
@@ -106,7 +107,7 @@ export function planSteps(plan: EventPlan, mandate: SpendMandate): AutopilotStep
       ),
     );
     const venueLine = plan.budget.find((l) => l.category === "Venue")?.amount ?? venue.pricePerHour * b.durationHours;
-    steps.push(buy(venue.name, "Venue", "Venue deposit (30%)", venueLine * 0.3, /hold on/i));
+    if (!opts.awaitVendors) steps.push(buy(venue.name, "Venue", "Venue deposit (30%)", venueLine * 0.3, /hold on/i));
   }
 
   const vendors = tidyVendors(plan.vendors, !!venue);
@@ -137,13 +138,15 @@ export function planSteps(plan: EventPlan, mandate: SpendMandate): AutopilotStep
           channel: "email",
           to: `bookings@${slug(q.vendor)}.com`,
           subject: `Booking: ${v.category} for ${b.title} (${b.guests.toLocaleString()} guests, ${b.date})`,
-          body: `Hi ${q.vendor} team,\n\nWe'd like to book ${v.suggestion.toLowerCase()} for ${b.title} in ${b.city} on ${b.date}, at the ${money(q.price)} we agreed${q.listPrice && q.listPrice > q.price ? ` (down from your ${money(q.listPrice)} list price)` : ""}.\n${v.contactTip}\n\nWe'll pay a 25% deposit by virtual card today. Please confirm availability and send your contract.`,
+          body: opts.awaitVendors
+            ? `Hi ${q.vendor} team,\n\nWe're organizing ${b.title} in ${b.city} on ${b.date} (${b.startTime}, ${b.durationHours}h, ${b.guests.toLocaleString()} guests) and would like to book ${v.suggestion.toLowerCase()}.\n${v.contactTip}\n\nOur budget for this is ${money(q.price)}, in line with the other quotes we've received. Can you confirm availability at that price, and your deposit terms? We cap deposits at 50%.${q.price >= 20000 ? "\nFor a contract this size we also need written performance terms (service levels, what's included, remedies if it falls short)." : ""}\n\nThanks!`
+            : `Hi ${q.vendor} team,\n\nWe'd like to book ${v.suggestion.toLowerCase()} for ${b.title} in ${b.city} on ${b.date}, at the ${money(q.price)} we agreed${q.listPrice && q.listPrice > q.price ? ` (down from your ${money(q.listPrice)} list price)` : ""}.\n${v.contactTip}\n\nWe'll pay a 25% deposit by virtual card today. Please confirm availability and send your contract.`,
           taskId: findTask(new RegExp(v.category, "i")),
         },
         "logistics",
     );
     steps.push({ ...book, apply: (a, p) => (a.shortlists?.find((x) => x.category === v.category)?.pick === sl.pick ? book.apply(a, p) : { a, plan: p }) });
-    steps.push(buy(q.vendor, v.category, `${v.category} deposit (25%)`, q.price * 0.25, new RegExp(`Book AV|${v.category}`, "i"), sl.why));
+    if (!opts.awaitVendors) steps.push(buy(q.vendor, v.category, `${v.category} deposit (25%)`, q.price * 0.25, new RegExp(`Book AV|${v.category}`, "i"), sl.why));
   }
 
   const ops = plan.ops;
@@ -407,7 +410,7 @@ export function negotiatedSavings(a: Autopilot): number {
   }, 0);
 }
 
-const LIVE = ["auto_approved", "approved", "pending"];
+export const LIVE = ["auto_approved", "approved", "pending"];
 
 /** Organizer overrides the agent's pick: cancels/refunds the old deposit and re-checks the new one against the mandate. */
 export function switchQuote(plan: EventPlan, category: string, idx: number): EventPlan {
@@ -459,4 +462,4 @@ export function refund(plan: EventPlan, id: string): EventPlan {
   };
 }
 
-const slug = (s: string) => s.split(/\s+(?:at|@|-|–|\|)\s+|,/i)[0].toLowerCase().replace(/^the\s+/, "").replace(/[^a-z0-9]+/g, "").slice(0, 30) || "vendor";
+export const slug = (s: string) => s.split(/\s+(?:at|@|-|–|\|)\s+|,/i)[0].toLowerCase().replace(/^the\s+/, "").replace(/[^a-z0-9]+/g, "").slice(0, 30) || "vendor";

@@ -4,6 +4,8 @@ import type { EventPlan, TextMessage } from "./types";
 import { discoverLink, isLinked, organizerReplies, photonConfig, textOrganizer } from "./photon";
 import { applyReply, decisionText, planContext, refNum, untexted } from "./decisions";
 import { mailConfig, sendEmail } from "./mailer";
+import { fetchReplies } from "./mailbox";
+import { answerVendor, interpret, matchThread, openThread, respond, followUps, settle, threadsText, type Effects } from "./vendorDeals";
 import { sendMessage, appendAudit, committed, defaultMandate, emptyAutopilot, negotiatedSavings, planSteps } from "./autopilot";
 import { runPlanner } from "./agents/orchestrator";
 import { answerQuestion } from "./answer";
@@ -16,8 +18,8 @@ import { stakeholderText } from "./stakeholders";
  * It owns the "active" plan (persisted to .data/), which the web app syncs with.
  */
 
-type State = { rev: number; plan: EventPlan | null; thread: TextMessage[]; since: number; seen: string[] };
-type Agent = { state: State; timer?: ReturnType<typeof setInterval>; polling: boolean; working: string | null; error?: string; notify?: ReturnType<typeof setTimeout> };
+type State = { rev: number; plan: EventPlan | null; thread: TextMessage[]; since: number; seen: string[]; mailSeen?: string[] };
+type Agent = { state: State; timer?: ReturnType<typeof setInterval>; polling: boolean; working: string | null; error?: string; notify?: ReturnType<typeof setTimeout>; mailTimer?: ReturnType<typeof setInterval>; mailPolling?: boolean; mailError?: string };
 
 const FILE = path.join(process.cwd(), ".data", "photon-agent.json");
 const g = globalThis as unknown as { __photonAgent?: Agent };
@@ -56,6 +58,7 @@ export function pushPlan(plan: EventPlan, baseRev: number): boolean {
 }
 
 export function startPhotonAgent() {
+  startMailAgent();
   const a = agent();
   if (a.timer || !photonConfig()) return;
   a.timer = setInterval(() => void tick(), 4000);
@@ -99,7 +102,7 @@ function runAutopilot(p: EventPlan): EventPlan {
   const mandate = p.autopilot?.mandate ?? defaultMandate(p);
   let a = p.autopilot ? { ...p.autopilot, mandate } : emptyAutopilot(mandate);
   let plan: EventPlan = { ...p, tasks: p.tasks.map((t) => ({ ...t })) };
-  for (const step of planSteps(p, mandate)) ({ a, plan } = step.apply(a, plan));
+  for (const step of planSteps(p, mandate, { awaitVendors: !!mailConfig() })) ({ a, plan } = step.apply(a, plan));
   return { ...plan, autopilot: a };
 }
 
@@ -165,7 +168,11 @@ export async function handleInbound(text: string, id: string) {
     const pending = ap.purchases.filter((x) => x.status === "pending" && !(ap.texted ?? []).includes(x.id));
     setPlan(ran);
     const saved = negotiatedSavings(ap);
-    await reply(
+    const drafted = ap.outbox.filter((m) => m.status === "draft" && /^(bookings|events)@/.test(m.to)).length;
+    if (mailConfig()) await reply(
+      `Done. Compared quotes and set a target price for each vendor${saved > 0 ? ` (${money(saved)} under list)` : ""}. ${drafted} vendor emails are drafted; vendor deposits wait until each vendor confirms a price by email. Text SEND to email them and I'll negotiate the replies.${pending.length ? ` ${pending.length} other payment${pending.length === 1 ? "" : "s"} need${pending.length === 1 ? "s" : ""} your OK, details next.` : ""}`,
+    );
+    else await reply(
       `Done. ${saved > 0 ? `Negotiated ${money(saved)} off vendor quotes. ` : ""}Paid ${auto.length} deposit${auto.length === 1 ? "" : "s"} (${money(auto.reduce((s, x) => s + x.amount, 0))}) on single-use cards; ${money(committed(ap.purchases))} committed of ${money(ap.mandate.totalCap)}.${pending.length ? ` ${pending.length} need${pending.length === 1 ? "s" : ""} your OK, details next.` : " Nothing needs you."}`,
     );
     await notifyDecisions();
@@ -173,6 +180,7 @@ export async function handleInbound(text: string, id: string) {
   }
 
   if (/^(this week|week|workflow|todo|to do|whats due|timeline)$/.test(low)) return reply(thisWeekText(p));
+  if (/^(vendors|vendor emails|vendor status|inbox|emails|threads|replies)$/.test(low)) return reply(threadsText(p));
   if (/^(stakeholders?|perspectives?|(attendee|sponsor|vendor|organizer|guest)s?( view| side| experience)?)$/.test(low)) return reply(stakeholderText(p));
   if (/^(open( the)? app|app|link|url|website|where( is| do i see)? (it|the app))$/.test(low)) {
     return reply(process.env.APP_URL ? `Open EventPilot: ${process.env.APP_URL}` : "Open EventPilot in your browser where it's running (e.g. http://localhost:3000). Everything you do by text shows up there.");
@@ -190,7 +198,7 @@ export async function handleInbound(text: string, id: string) {
       const results = await Promise.all(drafts.map(async (m) => ({ m, r: mail && m.channel === "email" ? await sendEmail(m, p.brief.title) : null })));
       for (const { m, r } of results) {
         if (r && !r.ok) { failed.push(`${m.to}: ${r.error}`); continue; }
-        if (r) q = log(q, "agent", "email_delivered", `${m.subject} → ${r.to} (written for ${m.to})`);
+        if (r?.ok) q = openThread(log(q, "agent", "email_delivered", `${m.subject} → ${r.to} (written for ${m.to})`), m, r.messageId);
         q = sendMessage(q, m.id);
         sent.push(m);
       }
@@ -201,7 +209,7 @@ export async function handleInbound(text: string, id: string) {
     const shown = sent.slice(0, 4).map((m) => `${m.subject} → ${m.to}`).join("; ");
     const how = mail ? `emailed for real from ${mail.from}, all redirected to ${mail.redirect}` : "simulated";
     const head = sent.length ? `Sent ${sent.length} draft${sent.length > 1 ? "s" : ""} (${how}): ${shown}${sent.length > 4 ? ` and ${sent.length - 4} more` : ""}.` : "Nothing went out.";
-    return reply(`${head}${failed.length ? ` ${failed.length} failed and stay in drafts (${failed[0]}).` : ""} Logged in the audit trail. Money still only moves on YES / PICK.`);
+    return reply(`${head}${failed.length ? ` ${failed.length} failed and stay in drafts (${failed[0]}).` : ""} ${mail && sent.some((m) => /^(bookings|events)@/.test(m.to)) ? " I'll read the vendors' replies, negotiate, and text you when a deal needs your OK. Text VENDORS for status." : ""} Logged in the audit trail. Money still only moves on YES / PICK.`);
   }
 
   const neg = low.match(/^(?:negotiate|negotiation|savings|deals?)(?:\s+([a-z &]+))?$/);
@@ -250,4 +258,95 @@ async function tick() {
   } finally {
     a.polling = false;
   }
+}
+
+// ---- Real vendor email: read replies, negotiate, follow up, confirm ----
+
+export function mailStatus() {
+  const a = agent();
+  return { watching: !!a.mailTimer, threads: a.state.plan?.autopilot?.threads?.length ?? 0, mailError: a.mailError };
+}
+
+function startMailAgent() {
+  const a = agent();
+  if (a.mailTimer || !mailConfig()) return;
+  a.mailTimer = setInterval(() => void mailTick(), Math.max(10, Number(process.env.VENDOR_POLL_SECONDS || 20)) * 1000);
+  setTimeout(() => void mailTick(), 3000);
+}
+
+const followMinutes = () => Math.max(1, Number(process.env.VENDOR_FOLLOWUP_MINUTES || 1440));
+
+function addMessageId(plan: EventPlan, threadId: string, id: string): EventPlan {
+  const ap = plan.autopilot!;
+  return { ...plan, autopilot: { ...ap, threads: (ap.threads ?? []).map((x) => (x.id === threadId && !x.messageIds.includes(id) ? { ...x, messageIds: [...x.messageIds, id] } : x)) } };
+}
+
+async function mailTick() {
+  const a = agent();
+  if (a.mailPolling || !a.state.plan?.autopilot?.threads?.length) return;
+  a.mailPolling = true;
+  try {
+    const replies = await fetchReplies(new Set(a.state.mailSeen ?? []));
+    a.mailError = undefined;
+    for (const r of replies) {
+      a.state.mailSeen = [...(a.state.mailSeen ?? []), r.messageId].slice(-500);
+      save();
+      const p = a.state.plan;
+      if (!p?.autopilot) break;
+      const t = matchThread(p, r);
+      if (!t || !r.text) continue;
+      const parsed = await interpret(r.text, t.log.filter((e) => e.dir === "out").at(-1)?.body ?? "");
+      const answer = parsed.question ? await answerVendor(p, t, parsed.question) : undefined;
+      const cur = agent().state.plan;
+      if (!cur?.autopilot) break;
+      const fx = respond(cur, t.id, r.text, parsed, answer);
+      await applyEffects({ ...fx, plan: addMessageId(fx.plan, t.id, r.messageId) }, `vr-${r.messageId}`);
+    }
+    if (a.state.plan?.autopilot) await applyEffects(followUps(a.state.plan, Date.now(), followMinutes()), `fu-${Date.now()}`);
+    if (a.state.plan?.autopilot) await applyEffects(settle(a.state.plan), `st-${Date.now()}`);
+  } catch (e) {
+    a.mailError = e instanceof Error ? e.message.slice(0, 160) : "mail check failed";
+  } finally {
+    a.mailPolling = false;
+  }
+}
+
+async function applyEffects(fx: Effects, key: string) {
+  if (!fx.emails.length && !fx.texts.length && fx.plan === agent().state.plan) return;
+  setPlan(fx.plan);
+  for (const e of fx.emails) {
+    const p = agent().state.plan!;
+    const t = p.autopilot?.threads?.find((x) => x.id === e.threadId);
+    if (!t) continue;
+    const r = await sendEmail({ to: t.to, subject: t.subject, body: e.body }, p.brief.title, { reply: true, inReplyTo: t.messageIds.at(-1), references: t.messageIds.slice(-10) });
+    const cur = agent().state.plan!;
+    const ap = cur.autopilot!;
+    const next = r.ok ? addMessageId(cur, t.id, r.messageId) : cur;
+    setPlan({ ...next, autopilot: { ...next.autopilot!, audit: appendAudit(ap.audit, "negotiator", r.ok ? "email_delivered" : "email_failed", `Re: ${t.subject} → ${r.ok ? r.to : r.error} (for ${t.to})`) } });
+  }
+  let i = 0;
+  for (const s of fx.texts) await say(s, `${key}-${i++}`);
+  scheduleNotify();
+}
+
+/** Web "Approve & send": sends one outbox message from the active plan and starts tracking the vendor's replies. */
+export async function sendOutbox(planId: string, id: string): Promise<{ ok: boolean; error?: string; plan?: EventPlan; rev?: number } | null> {
+  const p = agent().state.plan;
+  const m = p?.id === planId ? p.autopilot?.outbox.find((x) => x.id === id) : undefined;
+  if (!p || !m) return null;
+  if (m.status === "sent") return { ok: true, plan: p, rev: agent().state.rev };
+  let messageId: string | undefined, to: string | undefined;
+  if (m.channel === "email" && mailConfig()) {
+    const r = await sendEmail(m, p.brief.title);
+    if (!r.ok) return { ok: false, error: r.error };
+    messageId = r.messageId;
+    to = r.to;
+  }
+  let q = sendMessage(agent().state.plan!, m.id);
+  if (messageId) {
+    q = { ...q, autopilot: { ...q.autopilot!, audit: appendAudit(q.autopilot!.audit, "agent", "email_delivered", `${m.subject} → ${to} (written for ${m.to})`) } };
+    q = openThread(q, m, messageId);
+  }
+  setPlan(q);
+  return { ok: true, plan: q, rev: agent().state.rev };
 }

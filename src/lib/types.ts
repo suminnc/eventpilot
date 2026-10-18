@@ -182,7 +182,31 @@ export type TextMessage = {
   queued?: boolean;
 };
 
+export type ThreadEntry = { dir: "in" | "out"; ts: number; body: string; price?: number };
+/** A real email conversation with one vendor (replies read from the mailbox, negotiated by the agent). */
+export type VendorThread = {
+  id: string;
+  vendor: string;
+  category: string;
+  to: string;
+  subject: string;
+  messageIds: string[];
+  status: "awaiting_reply" | "negotiating" | "agreed" | "booked" | "declined" | "needs_you";
+  target: number;
+  ceiling: number;
+  offer?: number;
+  theirPrice?: number;
+  agreed?: number;
+  depositPct?: number;
+  rounds: number;
+  followups: number;
+  lastOut: number;
+  purchaseId?: string;
+  flagged?: boolean;
+  log: ThreadEntry[];
+};
 export type Autopilot = {
+  threads?: VendorThread[];
   shortlists?: Shortlist[];
   texts?: TextMessage[];
   texted?: string[];

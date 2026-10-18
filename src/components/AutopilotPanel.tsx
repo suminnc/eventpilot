@@ -1,7 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Check, CreditCard, Loader2, Lock, Mail, MessageSquare, Play, Receipt, RotateCcw, Search, ShieldCheck, ShieldX, Star, X } from "lucide-react";
-import type { EventPlan, SpendMandate } from "@/lib/types";
+import type { EventPlan, SpendMandate, VendorThread } from "@/lib/types";
 import { OrganizerTexts } from "./OrganizerTexts";
 import { committed, decide, defaultMandate, emptyAutopilot, negotiatedSavings, planSteps, refund, sendMessage, switchQuote, verifyAudit } from "@/lib/autopilot";
 
@@ -20,6 +20,10 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
   const [mandate, setMandate] = useState<SpendMandate>(plan.autopilot?.mandate ?? defaultMandate(plan));
   const [running, setRunning] = useState(false);
   const [feed, setFeed] = useState<string[]>([]);
+  const [mailLive, setMailLive] = useState(false);
+  useEffect(() => {
+    fetch("/api/email").then((r) => r.json()).then((j) => setMailLive(!!j.live)).catch(() => {});
+  }, []);
   const a = plan.autopilot;
 
   const run = async () => {
@@ -27,7 +31,7 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
     setFeed([]);
     let state = plan.autopilot ? { ...plan.autopilot, mandate } : emptyAutopilot(mandate);
     let p: EventPlan = { ...plan, tasks: plan.tasks.map((t) => ({ ...t })) };
-    for (const step of planSteps(plan, mandate)) {
+    for (const step of planSteps(plan, mandate, { awaitVendors: mailLive })) {
       setFeed((f) => [...f, step.label]);
       ({ a: state, plan: p } = step.apply(state, p));
       onChange({ ...p, autopilot: state });
@@ -203,6 +207,29 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
                 </div>
               ))}
             </section>
+            {a.threads?.length ? (
+              <section>
+                <h3 className="section-head"><Mail size={14} /> Vendor conversations</h3>
+                {a.threads.map((t) => (
+                  <details key={t.id} className="group border-b border-line py-3 text-sm">
+                    <summary className="flex cursor-pointer list-none items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate text-foreground">{t.vendor} <span className="text-muted">· {t.category}</span></span>
+                      {t.agreed ?? t.theirPrice ? <span className="shrink-0 font-mono text-xs text-muted">{money(t.agreed ?? t.theirPrice!)}</span> : null}
+                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${THREAD_STYLE[t.status]}`}>{THREAD_LABEL[t.status]}</span>
+                    </summary>
+                    <div className="mt-2 text-xs text-subtle">Target {money(t.target)} · ceiling {money(t.ceiling)}{t.offer ? ` · our offer ${money(t.offer)}` : ""} · {t.rounds} counter{t.rounds === 1 ? "" : "s"} · {t.followups} follow-up{t.followups === 1 ? "" : "s"}</div>
+                    <ol className="mt-2 flex flex-col gap-2">
+                      {t.log.map((e, i) => (
+                        <li key={i} className={`rounded-lg border border-line p-2 ${e.dir === "in" ? "bg-surface" : ""}`}>
+                          <div className="text-xs font-medium text-subtle">{e.dir === "out" ? "EventPilot" : t.vendor} · {new Date(e.ts).toLocaleString()}{e.price ? ` · ${money(e.price)}` : ""}</div>
+                          <pre className="mt-1 whitespace-pre-wrap font-sans text-xs leading-relaxed text-muted">{e.body}</pre>
+                        </li>
+                      ))}
+                    </ol>
+                  </details>
+                ))}
+              </section>
+            ) : null}
             <section>
               <h3 className="section-head"><Mail size={14} /> Outbox</h3>
               {a.outbox.map((m) => (
@@ -216,8 +243,9 @@ export function AutopilotPanel({ plan, onChange }: { plan: EventPlan; onChange: 
                       <button disabled={running} className="shrink-0 rounded-lg border border-line px-2 py-0.5 text-xs font-medium text-foreground hover:bg-surface disabled:opacity-40" onClick={async (e) => {
                         e.preventDefault();
                         if (m.channel === "email") {
-                          const r = await fetch("/api/email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: m.to, subject: m.subject, body: m.body, title: plan.brief.title }) }).then((x) => x.json()).catch(() => ({ ok: false, error: "network error" }));
+                          const r = await fetch("/api/email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ planId: plan.id, outboxId: m.id, to: m.to, subject: m.subject, body: m.body, title: plan.brief.title }) }).then((x) => x.json()).catch(() => ({ ok: false, error: "network error" }));
                           if (!r.simulated && !r.ok) { window.alert(`Email not sent: ${r.error}`); return; }
+                          if (r.plan) { onChange(r.plan); return; }
                         }
                         onChange(sendMessage(plan, m.id));
                       }}>Approve & send</button>
@@ -264,3 +292,6 @@ function Num({ label, value, onChange, disabled }: { label: string; value: numbe
     </label>
   );
 }
+
+const THREAD_LABEL: Record<VendorThread["status"], string> = { awaiting_reply: "Awaiting reply", negotiating: "Negotiating", agreed: "Agreed · needs OK", booked: "Booked", declined: "Declined", needs_you: "Needs you" };
+const THREAD_STYLE: Record<VendorThread["status"], string> = { awaiting_reply: "bg-surface text-muted", negotiating: "bg-warning-soft text-warning", agreed: "bg-warning-soft text-warning", booked: "bg-success-soft text-success", declined: "bg-surface text-muted", needs_you: "bg-danger-soft text-danger" };

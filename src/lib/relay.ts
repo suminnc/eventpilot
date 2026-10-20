@@ -1,5 +1,5 @@
 /** On a deployment without Photon/email (e.g. Vercel), forwards texting + email API calls to the always-on EventPilot server. */
-const LIVE_SERVER = "https://merchandise-obtaining-prints-russia.trycloudflare.com";
+const LIVE_SERVER = "https://wait-chapters-minute-rate.trycloudflare.com";
 
 /** Set EVENTPILOT_SERVER_URL=off on Vercel to keep the public site fully simulated. */
 export function relayUrl() {

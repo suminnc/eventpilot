@@ -4,9 +4,12 @@ import type { OutboxMessage } from "./types";
  * Real email for vendor/permit drafts. Live only when SMTP_USER + SMTP_PASS are set.
  * EMAIL_REDIRECT_TO (required for live mode) sends every message to one test inbox instead of the vendor.
  */
+/** Inboxes the organizer asked never to email again. */
+const BLOCKED = new Set(["taiaudrey246@gmail.com"]);
+
 export function mailConfig() {
   const user = process.env.SMTP_USER, pass = process.env.SMTP_PASS, redirect = process.env.EMAIL_REDIRECT_TO;
-  if (!user || !pass || !redirect) return null;
+  if (!user || !pass || !redirect || BLOCKED.has(redirect.trim().toLowerCase())) return null;
   return {
     host: process.env.SMTP_HOST || "smtp.gmail.com",
     port: Number(process.env.SMTP_PORT || 465),
